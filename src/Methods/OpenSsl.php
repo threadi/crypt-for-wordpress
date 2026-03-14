@@ -5,13 +5,13 @@
  * @package crypt-for-wordpress
  */
 
-namespace Crypt\Methods;
+namespace CryptForWordPress\Methods;
 
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
 
-use Crypt\Helper;
-use Crypt\Method_Base;
+use CryptForWordPress\Helper;
+use CryptForWordPress\Method_Base;
 
 /**
  * Object to handle crypt tasks with OpenSSL.

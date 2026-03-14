@@ -36,6 +36,17 @@ To decrypt an encrypted string use:
 $decrypted = $crypt->decrypt( 'My encrypted string to encrypt.' );
 ```
 
+## Uninstall
+
+Use these code to remove the settings during uninstallation of your theme or plugin: 
+
+```
+$crypt = new \Crypt\Crypt();
+$crypt->set_slug( 'your-plugin-slug' ); // your plugin slug.
+$crypt->set_plugin_file( __FILE__ ); // your plugin file.
+$crypt->uninstall();
+```
+
 ## Check for WordPress Coding Standards
 
 ### Initialize
