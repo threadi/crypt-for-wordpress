@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="CryptForWordPress" namespace="CryptForWordPress\CryptForWordPress" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/squizlabs/PHP_CodeSniffer/master/phpcs.xsd">
+
+    <description>Crypt for WordPress Coding Standards</description>
+
+    <!--
+        Only scan files with .php extension.
+    -->
+    <arg name="extensions" value="php" />
+
+    <!--
+        Directories to exclude.
+    -->
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+
+    <!-- Use additional rulesets -->
+    <rule ref="WordPress-Docs"/>
+    <rule ref="WordPress-Extra"/>
+    <rule ref="WordPress">
+        <!-- Excluded in favour to match PSR-4-namings of classes. -->
+        <exclude name="WordPress.Files.FileName"/>
+        <!-- Exclude base64-warnings for backwards-compatibility with older plugin-version, but it also disabled serialize-warning .. -->
+        <exclude name="WordPress.PHP.DiscouragedPHPFunctions"/>
+    </rule>
+</ruleset>
