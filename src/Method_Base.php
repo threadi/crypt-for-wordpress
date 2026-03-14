@@ -241,7 +241,7 @@ class Method_Base {
 		$wp_filesystem = Helper::get_wp_filesystem();
 
 		// create a custom must-use-plugin instead.
-		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . $this->get_hash_value() . "' ); // Added by Easy Directory Listing for WordPress.\r\n";
+		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . $this->get_hash_value() . "' ); // Added by " . $this->get_plugin_name() . ".\r\n";
 
 		// create mu-plugin directory if it is missing.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {
