@@ -5,7 +5,7 @@
  * @package crypt-for-wordpress
  */
 
-namespace Crypt;
+namespace CryptForWordPress;
 
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
@@ -117,8 +117,8 @@ class Crypt {
 	 */
 	private function get_available_methods(): array {
 		$methods = array(
-			'Crypt\Methods\OpenSsl',
-			'Crypt\Methods\Sodium',
+			'CryptForWordPress\Methods\OpenSsl',
+			'CryptForWordPress\Methods\Sodium',
 		);
 
 		/**

@@ -5,7 +5,7 @@
  * @package crypt-for-wordpress
  */
 
-namespace Crypt;
+namespace CryptForWordPress;
 
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
