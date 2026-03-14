@@ -13,7 +13,7 @@ This repository contains the source code for the Composer package “Crypt for W
 2. Add the following codes in your plugin or theme:
 
 ```
-$crypt = new \Crypt\Crypt();
+$crypt = new \CryptForWordPress\Crypt();
 $crypt->set_slug( 'your-plugin-slug' ); // your plugin slug.
 $crypt->set_plugin_file( __FILE__ ); // your plugin file.
 ```
@@ -41,7 +41,7 @@ $decrypted = $crypt->decrypt( 'My encrypted string to encrypt.' );
 Use these code to remove the settings during uninstallation of your theme or plugin: 
 
 ```
-$crypt = new \Crypt\Crypt();
+$crypt = new \CryptForWordPress\Crypt();
 $crypt->set_slug( 'your-plugin-slug' ); // your plugin slug.
 $crypt->set_plugin_file( __FILE__ ); // your plugin file.
 $crypt->uninstall();
