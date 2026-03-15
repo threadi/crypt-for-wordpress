@@ -16,12 +16,23 @@ jobs:
 
       - name: Build plugin
         run: |
-          composer install --no-dev
+          composer install -oa --no-dev
+
+      - name: Run PHPStan analyse
+        run: vendor/bin/phpstan analyse
+
+      - name: PHP Compatibility check
+        run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP
+
+      - name: Run WordPress Coding Standard fixes
+        run: vendor/bin/phpcbf --standard=ruleset.xml .
+
+      - uses: anchore/sbom-action@v0
 
       - name: ZIP plugin
         run: |
           cd ..
-          zip -r -q ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}/* -x "*/.git/*" "*/.github/*" "*/ruleset.xml" "*/composer.lock" "*/readme.md" "*/.gitignore" "*/vendor/*"
+          zip -r -q ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}/* -x "*/.git/*" "*/.github/*" "*/changelog.md" "*/phpstan.neon" "*/ruleset.xml" "*/composer.lock" "*/readme.md" "*/.gitignore" "*/vendor/*"
           zip -u -q ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}/vendor/composer/*
           cp ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}/
 
