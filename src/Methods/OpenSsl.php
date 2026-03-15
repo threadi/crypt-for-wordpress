@@ -166,12 +166,18 @@ class OpenSsl extends Method_Base {
 	/**
 	 * Encrypt a given string.
 	 *
+	 * @access private
+	 *
 	 * @param string $plain_text Text to encrypt.
 	 *
-	 * @return string
 	 * @throws RuntimeException If error occurred.
 	 */
 	public function encrypt( string $plain_text ): string {
+		// bail if slug is not set.
+		if ( empty( $this->get_slug() ) ) {
+			return '';
+		}
+
 		// bail if it is unusable.
 		if ( ! $this->is_usable() ) {
 			return '';
@@ -266,6 +272,11 @@ class OpenSsl extends Method_Base {
 	 * @throws RuntimeException If cipher is unknown.
 	 */
 	public function decrypt( string $encrypted_text ): string {
+		// bail if slug is not set.
+		if ( empty( $this->get_slug() ) ) {
+			return '';
+		}
+
 		// bail if it is unusable.
 		if ( ! $this->is_usable() ) {
 			return '';

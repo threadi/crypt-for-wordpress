@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3] - 15.03.2026
+
+### Changed
+
+- Prevent direct access on encrypt and decrypt methods in crypt objects
+- Prevent usage of this package outside of WordPress
+
 ## [1.0.2] - 15.03.2026
 
 ### Added

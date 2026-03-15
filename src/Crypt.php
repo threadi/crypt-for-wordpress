@@ -80,11 +80,13 @@ class Crypt {
 	/**
 	 * Return an encrypted string.
 	 *
-	 * @param string $encrypted_text Text to decrypt.
+	 * @access public
+	 *
+	 * @param string $plain_text String to encrypt.
 	 *
 	 * @return string
 	 */
-	public function encrypt( string $encrypted_text ): string {
+	public function encrypt( string $plain_text ): string {
 		// get the active method.
 		$method_obj = $this->get_method();
 
@@ -94,7 +96,7 @@ class Crypt {
 		}
 
 		// encrypt the string with the detected method.
-		return $method_obj->encrypt( $encrypted_text );
+		return $method_obj->encrypt( $plain_text );
 	}
 
 	/**
@@ -143,6 +145,11 @@ class Crypt {
 	 * @return array<int,Method_Base>
 	 */
 	private function get_methods_as_objects(): array {
+		// bail if this is not a WordPress environment.
+		if ( ! defined( 'ABSPATH' ) ) {
+			return array();
+		}
+
 		// define the list for objects.
 		$list = array();
 

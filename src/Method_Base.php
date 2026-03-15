@@ -103,6 +103,8 @@ class Method_Base {
 	/**
 	 * Encrypt a given string.
 	 *
+	 * @access private
+	 *
 	 * @param string $plain_text The plain string.
 	 *
 	 * @return string
