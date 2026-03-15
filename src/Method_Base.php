@@ -57,6 +57,13 @@ class Method_Base {
 	private string $plugin_author_url = '';
 
 	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $configuration = array();
+
+	/**
 	 * Constructor for this object.
 	 */
 	protected function __construct() {}
@@ -398,5 +405,15 @@ class Method_Base {
 	 */
 	public function set_author_url( string $plugin_author_url ): void {
 		$this->plugin_author_url = $plugin_author_url;
+	}
+
+	/**
+	 * Set the configuration.
+	 *
+	 * @param array<string,mixed> $configuration The configuration to use.
+	 * @return void
+	 */
+	public function set_config( array $configuration ): void {
+		$this->configuration = array_merge( $this->configuration, $configuration );
 	}
 }

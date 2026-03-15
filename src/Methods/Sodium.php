@@ -13,6 +13,7 @@ defined( 'ABSPATH' ) || exit;
 use CryptForWordPress\Helper;
 use CryptForWordPress\Method_Base;
 use Exception;
+use RuntimeException;
 use SodiumException;
 
 /**
@@ -32,6 +33,15 @@ class Sodium extends Method_Base {
 	 * @var int
 	 */
 	private int $coding_id = SODIUM_BASE64_VARIANT_ORIGINAL;
+
+	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $configuration = array(
+		'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen',
+	);
 
 	/**
 	 * Instance of this object.
@@ -73,7 +83,29 @@ class Sodium extends Method_Base {
 
 		// if no hash is set, create one.
 		if ( empty( $this->get_hash() ) ) {
-			$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
+			// get the hash depending on setting.
+			switch ( $this->configuration['hash_type'] ) {
+				case 'sodium_crypto_secretbox_keygen':
+					$hash = sodium_crypto_secretbox_keygen();
+					break;
+				case 'sodium_crypto_auth_keygen':
+					$hash = sodium_crypto_auth_keygen();
+					break;
+				case 'sodium_crypto_generichash_keygen':
+					$hash = sodium_crypto_generichash_keygen();
+					break;
+				case 'sodium_crypto_kdf_keygen':
+					$hash = sodium_crypto_kdf_keygen();
+					break;
+				case 'random_bytes':
+					$hash = random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
+					break;
+				default:
+					$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
+					break;
+			}
+
+			// set the hash.
 			$this->set_hash( $hash );
 		}
 
@@ -140,7 +172,7 @@ class Sodium extends Method_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return function_exists( 'sodium_crypto_aead_aes256gcm_is_available' ) && sodium_crypto_aead_aes256gcm_is_available();
+		return extension_loaded( 'sodium' );
 	}
 
 	/**
@@ -149,6 +181,7 @@ class Sodium extends Method_Base {
 	 * @param string $plain_text The plain string.
 	 *
 	 * @return string
+	 * @throws RuntimeException If error occurred.
 	 */
 	public function encrypt( string $plain_text ): string {
 		// bail if it is unusable.
@@ -160,11 +193,21 @@ class Sodium extends Method_Base {
 			// generate a nonce.
 			$nonce = random_bytes( SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES );
 
+			// get the encrypted text depending on the supported sodium methods.
+			$encrypted_text = '';
+			if ( function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
+				$encrypted_text = sodium_crypto_aead_aes256gcm_encrypt( $plain_text, '', $nonce, $this->get_hash() );
+			} elseif ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' ) ) {
+				$encrypted_text = sodium_crypto_aead_xchacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() );
+			} elseif ( function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_encrypt' ) ) {
+				$encrypted_text = sodium_crypto_aead_chacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() );
+			}
+
 			// return encrypted text as base64.
-			return sodium_bin2base64( $nonce . ':' . sodium_crypto_aead_aes256gcm_encrypt( $plain_text, '', $nonce, $this->get_hash() ), $this->get_coding_id() );
+			return sodium_bin2base64( $nonce . ':' . $encrypted_text, $this->get_coding_id() );
 		} catch ( Exception $e ) {
-			// return nothing.
-			return '';
+			// trigger the error.
+			throw new RuntimeException( 'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() ) );
 		}
 	}
 
@@ -174,6 +217,7 @@ class Sodium extends Method_Base {
 	 * @param string $encrypted_text The encrypted string.
 	 *
 	 * @return string
+	 * @throws RuntimeException If error occurred.
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if it is unusable.
@@ -190,15 +234,26 @@ class Sodium extends Method_Base {
 				return '';
 			}
 
-			// return decrypted text.
-			$decrypted = sodium_crypto_aead_aes256gcm_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
+			// get the decrypted text.
+			$decrypted = '';
+			if ( function_exists( 'sodium_crypto_aead_aes256gcm_decrypt' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
+				$decrypted = sodium_crypto_aead_aes256gcm_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
+			} elseif ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt' ) ) {
+				$decrypted = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
+			} elseif ( function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt' ) ) {
+				$decrypted = sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
+			}
+
+			// bail if decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
 				return '';
 			}
+
+			// return the resulting decrypted string.
 			return $decrypted;
 		} catch ( Exception $e ) {
-			// return nothing.
-			return '';
+			// trigger the error.
+			throw new RuntimeException( 'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() ) );
 		}
 	}
 
@@ -224,6 +279,7 @@ class Sodium extends Method_Base {
 		// save the hash in the database.
 		update_option( $this->get_slug() . '_sodium_hash', $this->get_hash_value() );
 
+		// run the parent uninstall tasks.
 		parent::uninstall();
 	}
 
