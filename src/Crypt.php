@@ -36,6 +36,13 @@ class Crypt {
 	private string $slug = '';
 
 	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,array<string,mixed>>
+	 */
+	private array $configuration = array();
+
+	/**
 	 * Constructor for this object.
 	 */
 	public function __construct() {}
@@ -157,11 +164,17 @@ class Crypt {
 				continue;
 			}
 
+			// bail if a method is forced and this is not the forced method.
+			if ( ! empty( $this->configuration['force_method'] ) && $obj->get_name() !== $this->configuration['force_method'] ) { // @phpstan-ignore notIdentical.alwaysTrue
+				continue;
+			}
+
 			// add settings.
 			$obj->set_slug( $this->get_slug() );
 			$obj->set_plugin_name( $this->get_plugin_name() );
 			$obj->set_author_name( $this->get_plugin_author() );
 			$obj->set_author_url( $this->get_plugin_author_url() );
+			$obj->set_config( $this->get_method_config( $obj->get_name() ) );
 
 			// add the object to the list.
 			$list[] = $obj;
@@ -272,5 +285,31 @@ class Crypt {
 
 		// return the plugin name.
 		return $plugin_data['AuthorURI'];
+	}
+
+	/**
+	 * Return the configuration for a specific method by its name.
+	 *
+	 * @param string $method_name The method name.
+	 * @return array<string,mixed>
+	 */
+	private function get_method_config( string $method_name ): array {
+		// bail if no configuration for this name is set.
+		if ( ! isset( $this->configuration[ $method_name ] ) ) {
+			return array();
+		}
+
+		// return the configuration.
+		return $this->configuration[ $method_name ];
+	}
+
+	/**
+	 * Set method configurations.
+	 *
+	 * @param array<string,array<string,mixed>> $configurations List of configurations for the methods.
+	 * @return void
+	 */
+	public function set_method_config( array $configurations ): void {
+		$this->configuration = $configurations;
 	}
 }
