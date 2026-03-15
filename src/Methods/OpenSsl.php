@@ -221,10 +221,10 @@ class OpenSsl extends Method_Base {
 				$tag
 			);
 
-            // bail if text could not be encrypted.
-            if( ! is_string( $ciphertext ) ) {
-                return '';
-            }
+			// bail if text could not be encrypted.
+			if ( ! is_string( $ciphertext ) ) {
+				return '';
+			}
 
 			// return the resulting encrypted string.
 			return base64_encode(
@@ -315,10 +315,10 @@ class OpenSsl extends Method_Base {
 				$tag
 			);
 
-            // bail if decryption was not successfully.
-            if ( ! is_string( $original_plaintext ) ) {
-                return '';
-            }
+			// bail if decryption was not successfully.
+			if ( ! is_string( $original_plaintext ) ) {
+				return '';
+			}
 		} else {
 			// for all other ciphers.
 
