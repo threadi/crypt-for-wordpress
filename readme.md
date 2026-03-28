@@ -86,7 +86,7 @@ $encrypted = $crypt->encrypt( 'My string to encrypt.' );
 To decrypt an encrypted string use:
 
 ```
-$decrypted = $crypt->decrypt( 'My encrypted string to encrypt.' );
+$decrypted = $crypt->decrypt( 'My encrypted string to decrypt.' );
 ```
 
 ## Uninstall
