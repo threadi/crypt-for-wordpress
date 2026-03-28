@@ -34,22 +34,12 @@ Data encryption is not a silver bullet for protecting data. Projects that involv
 2. Add the following codes in your plugin or theme:
 
 ```
-$crypt = new \CryptForWordPress\Crypt();
-$crypt->set_slug( 'your-plugin-slug' ); // your plugin slug.
-$crypt->set_plugin_file( __FILE__ ); // your plugin file.
+$crypt = new \CryptForWordPress\Crypt( __FILE__ );
 ```
 
 ### Parameters
 
-#### set_slug()
-
-Use your plugin- or theme-slug. This is required.
-
-#### set_plugin_file()
-
-Use your plugin- or theme-main-file. This is required.
-
-#### set_method_config()
+#### set_config()
 
 Set your custom configuration for the supported methods as array. This is optional, all options are optional.
 
@@ -104,9 +94,7 @@ $decrypted = $crypt->decrypt( 'My encrypted string to encrypt.' );
 Use these code to remove the settings during uninstallation of your theme or plugin: 
 
 ```
-$crypt = new \CryptForWordPress\Crypt();
-$crypt->set_slug( 'your-plugin-slug' ); // your plugin slug.
-$crypt->set_plugin_file( __FILE__ ); // your plugin file.
+$crypt = new \CryptForWordPress\Crypt( __FILE__ );
 $crypt->uninstall();
 ```
 

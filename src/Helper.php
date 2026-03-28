@@ -18,34 +18,6 @@ use WP_Filesystem_Direct;
  */
 class Helper {
 	/**
-	 * Return the writable wp-config.php path.
-	 *
-	 * @param string $slug The plugin slug for the hook names.
-	 * @return string
-	 */
-	public static function get_wp_config_path( string $slug ): string {
-		$wp_config_php = 'wp-config';
-		/**
-		 * Filter to change the filename of the used wp-config.php without its extension .php.
-		 *
-		 * @since 1.0.0 Available since 1.0.0.
-		 * @param string $wp_config_php The filename.
-		 */
-		$wp_config_php = apply_filters( $slug . '_wp_config_name', $wp_config_php );
-
-		// get the path for wp-config.php.
-		$wp_config_php_path = ABSPATH . $wp_config_php . '.php';
-
-		/**
-		 * Filter the path for the wp-config.php before we return it.
-		 *
-		 * @since 1.0.0 Available since 1.0.0.
-		 * @param string $wp_config_php_path The path.
-		 */
-		return apply_filters( $slug . '_wp_config_path', $wp_config_php_path );
-	}
-
-	/**
 	 * Return whether a given file is writable.
 	 *
 	 * @param string $file The file with the absolute path.

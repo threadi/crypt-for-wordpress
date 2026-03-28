@@ -10,7 +10,7 @@ namespace CryptForWordPress\Methods;
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
 
-use CryptForWordPress\Helper;
+use CryptForWordPress\Crypt;
 use CryptForWordPress\Method_Base;
 use RuntimeException;
 
@@ -47,10 +47,12 @@ class OpenSsl extends Method_Base {
 
 	/**
 	 * Return the instance of this Singleton object.
+	 *
+	 * @param Crypt $crypt_obj The crypt object.
 	 */
-	public static function get_instance(): OpenSsl {
+	public static function get_instance( Crypt $crypt_obj ): OpenSsl {
 		if ( is_null( self::$instance ) ) {
-			self::$instance = new self();
+			self::$instance = new self( $crypt_obj );
 		}
 
 		return self::$instance;
@@ -71,13 +73,18 @@ class OpenSsl extends Method_Base {
 		}
 
 		// get hash from the database.
-		$this->set_hash( get_option( $this->get_slug() . '_hash', '' ) );
+		$this->set_hash( get_option( $this->get_crypt_obj()->get_slug() . '_hash', '' ) );
 
 		// if no hash is set, create one.
 		if ( empty( $this->get_hash() ) ) {
 			// bail if configured hash algorithm does not exist.
 			if ( ! in_array( $this->configuration['hash_algorithm'], hash_algos(), true ) ) {
 				throw new RuntimeException( 'Unknown hash algorithm: ' . wp_kses_post( $this->configuration['hash_algorithm'] ) );
+			}
+
+			// bail if hash type is unknown.
+			if ( ! in_array( $this->configuration['hash_type'], array( 'hash', 'hash_pbkdf2' ), true ) ) {
+				throw new RuntimeException( 'Unknown hash type: ' . wp_kses_post( $this->configuration['hash_type'] ) );
 			}
 
 			// prepare the hash.
@@ -106,49 +113,11 @@ class OpenSsl extends Method_Base {
 			$this->set_hash( $hash );
 		}
 
-		// get the wp-config.php path.
-		$wp_config_php_path = Helper::get_wp_config_path( $this->get_slug() );
-
-		// bail if the path could not be loaded.
-		if ( ! $wp_config_php_path ) {
-			return;
-		}
-
-		// bail if wp-config.php is not writable.
-		if ( $this->configuration['force_mu_plugin'] || ! Helper::is_writable( $wp_config_php_path ) ) {
-			$this->create_mu_plugin();
-			return;
-		}
-
-		// get WP Filesystem-handler.
-		$wp_filesystem = Helper::get_wp_filesystem();
-
-		// get the contents of the wp-config.php.
-		$wp_config_php_content = $wp_filesystem->get_contents( $wp_config_php_path );
-
-		// bail if the file has no contents.
-		if ( ! $wp_config_php_content ) {
-			return;
-		}
-
-		// remove previous value.
-		$placeholder           = '## ' . strtoupper( $this->get_plugin_name() ) . ' placeholder ##';
-		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $this->get_constant() . '["\'].*$@miU', $placeholder, $wp_config_php_content );
-		$wp_config_php_content = preg_replace( "@\n$placeholder@", '', (string) $wp_config_php_content );
-
-		// add the constant.
-		$define                = "define( '" . $this->get_constant() . "', '" . $this->get_hash() . "' ); // Added by " . $this->get_plugin_name() . ".\r\n";
-		$wp_config_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $wp_config_php_content, 1 );
-
-		if ( ! is_string( $wp_config_php_content ) ) {
-			return;
-		}
-
-		// save the changed wp-config.php.
-		$wp_filesystem->put_contents( $wp_config_php_path, $wp_config_php_content );
+		// save the hash on its place.
+		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash() );
 
 		// delete the old option field.
-		delete_option( $this->get_slug() . '_hash' );
+		delete_option( $this->get_crypt_obj()->get_slug() . '_hash' );
 
 		// run the constant for this process.
 		$this->run_constant();
@@ -174,7 +143,7 @@ class OpenSsl extends Method_Base {
 	 */
 	public function encrypt( string $plain_text ): string {
 		// bail if slug is not set.
-		if ( empty( $this->get_slug() ) ) {
+		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			return '';
 		}
 
@@ -273,7 +242,7 @@ class OpenSsl extends Method_Base {
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
-		if ( empty( $this->get_slug() ) ) {
+		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			return '';
 		}
 
@@ -404,7 +373,7 @@ class OpenSsl extends Method_Base {
 		$this->init();
 
 		// save the hash in the database.
-		update_option( $this->get_slug() . '_hash', $this->get_hash() );
+		update_option( $this->get_crypt_obj()->get_slug() . '_hash', $this->get_hash() );
 
 		// run parent uninstalling tasks.
 		parent::uninstall();
