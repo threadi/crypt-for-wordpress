@@ -10,7 +10,7 @@ namespace CryptForWordPress\Methods;
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
 
-use CryptForWordPress\Helper;
+use CryptForWordPress\Crypt;
 use CryptForWordPress\Method_Base;
 use Exception;
 use RuntimeException;
@@ -52,10 +52,12 @@ class Sodium extends Method_Base {
 
 	/**
 	 * Return the instance of this Singleton object.
+	 *
+	 * @param Crypt $crypt_obj The crypt object.
 	 */
-	public static function get_instance(): Sodium {
+	public static function get_instance( Crypt $crypt_obj ): Sodium {
 		if ( is_null( self::$instance ) ) {
-			self::$instance = new self();
+			self::$instance = new self( $crypt_obj );
 		}
 
 		return self::$instance;
@@ -79,7 +81,7 @@ class Sodium extends Method_Base {
 		}
 
 		// get hash from the old db entry.
-		$this->set_hash( sodium_base642bin( get_option( $this->get_slug() . '_sodium_hash', '' ), $this->get_coding_id() ) );
+		$this->set_hash( sodium_base642bin( get_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', '' ), $this->get_coding_id() ) );
 
 		// if no hash is set, create one.
 		if ( empty( $this->get_hash() ) ) {
@@ -109,49 +111,10 @@ class Sodium extends Method_Base {
 			$this->set_hash( $hash );
 		}
 
-		// get the wp-config.php path.
-		$wp_config_php_path = Helper::get_wp_config_path( $this->get_slug() );
-
-		// bail if the path could not be loaded.
-		if ( ! $wp_config_php_path ) {
-			return;
-		}
-
-		// bail if wp-config.php is not writable.
-		if ( ! Helper::is_writable( $wp_config_php_path ) ) {
-			$this->create_mu_plugin();
-			return;
-		}
-
-		// get WP Filesystem-handler.
-		$wp_filesystem = Helper::get_wp_filesystem();
-
-		// get the contents of the wp-config.php.
-		$wp_config_php_content = $wp_filesystem->get_contents( $wp_config_php_path );
-
-		// bail if the file has no contents.
-		if ( ! $wp_config_php_content ) {
-			return;
-		}
-
-		// remove previous value.
-		$placeholder           = '## ' . strtoupper( $this->get_plugin_name() ) . ' placeholder ##';
-		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $this->get_constant() . '["\'].*$@miU', $placeholder, $wp_config_php_content );
-		$wp_config_php_content = preg_replace( "@\n$placeholder@", '', (string) $wp_config_php_content );
-
-		// add the constant.
-		$define                = "define( '" . $this->get_constant() . "', '" . $this->get_hash_value() . "' ); // Added by " . $this->get_plugin_name() . ".\r\n";
-		$wp_config_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $wp_config_php_content, 1 );
-
-		if ( ! is_string( $wp_config_php_content ) ) {
-			return;
-		}
-
-		// save the changed wp-config.php.
-		$wp_filesystem->put_contents( $wp_config_php_path, $wp_config_php_content );
+		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
 
 		// delete the old option field.
-		delete_option( $this->get_slug() . '_sodium_hash' );
+		delete_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash' );
 
 		// run the constant for this process.
 		$this->run_constant();
@@ -163,7 +126,7 @@ class Sodium extends Method_Base {
 	 * @return string
 	 */
 	protected function get_constant(): string {
-		return strtoupper( $this->get_slug() ) . '-SODIUM-HASH';
+		return strtoupper( $this->get_crypt_obj()->get_slug() ) . '-SODIUM-HASH';
 	}
 
 	/**
@@ -187,7 +150,7 @@ class Sodium extends Method_Base {
 	 */
 	public function encrypt( string $plain_text ): string {
 		// bail if slug is not set.
-		if ( empty( $this->get_slug() ) ) {
+		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			return '';
 		}
 
@@ -228,7 +191,7 @@ class Sodium extends Method_Base {
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
-		if ( empty( $this->get_slug() ) ) {
+		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			return '';
 		}
 
@@ -289,7 +252,7 @@ class Sodium extends Method_Base {
 		$this->init();
 
 		// save the hash in the database.
-		update_option( $this->get_slug() . '_sodium_hash', $this->get_hash_value() );
+		update_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', $this->get_hash_value() );
 
 		// run the parent uninstall tasks.
 		parent::uninstall();

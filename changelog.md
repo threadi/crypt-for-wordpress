@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0] - 29.03.2026
+
+### Added
+
+- Added new places handling where the token will be saved
+- Added places for wp-config.php, mu-plugin and custom file
+
+### Changed
+
+- Optimized calling for Crypt-object with fewer options as possible
+- set_method_config() is now set_config()
+- Updated documentation
+
 ## [1.0.3] - 15.03.2026
 
 ### Changed

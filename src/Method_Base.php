@@ -29,34 +29,6 @@ class Method_Base {
 	protected string $hash = '';
 
 	/**
-	 * The slug of the used plugin.
-	 *
-	 * @var string
-	 */
-	private string $slug = '';
-
-	/**
-	 * The name of the used plugin.
-	 *
-	 * @var string
-	 */
-	private string $plugin_name = '';
-
-	/**
-	 * The name of the plugin author.
-	 *
-	 * @var string
-	 */
-	private string $plugin_author = '';
-
-	/**
-	 * The URL of the plugin author.
-	 *
-	 * @var string
-	 */
-	private string $plugin_author_url = '';
-
-	/**
 	 * The method configurations.
 	 *
 	 * @var array<string,mixed>
@@ -64,9 +36,20 @@ class Method_Base {
 	protected array $configuration = array();
 
 	/**
-	 * Constructor for this object.
+	 * The crypt object.
+	 *
+	 * @var Crypt
 	 */
-	protected function __construct() {}
+	private Crypt $crypt_obj;
+
+	/**
+	 * Constructor for this object.
+	 *
+	 * @param Crypt $crypt_obj The crypt object.
+	 */
+	protected function __construct( Crypt $crypt_obj ) {
+		$this->crypt_obj = $crypt_obj;
+	}
 
 	/**
 	 * Prevent cloning of this object.
@@ -202,97 +185,7 @@ class Method_Base {
 	 * @return string
 	 */
 	protected function get_constant(): string {
-		return strtoupper( $this->get_slug() ) . '-HASH';
-	}
-
-	/**
-	 * Return the header for the MU-plugin.
-	 *
-	 * @return string
-	 */
-	private function get_php_header(): string {
-		return '
-/**
- * Plugin Name:       Encryption for ' . $this->get_plugin_name() . '
- * Description:       Holds the hash value to use encryption within ' . $this->get_plugin_name() . '.
- * Requires at least: 4.9.24
- * Requires PHP:      8.1
- * Version:           1.0.0
- * Author:            ' . $this->get_author_name() . '
- * Author URI:        ' . $this->get_author_url() . '
- * Text Domain:       ' . $this->get_slug() . '-hash
- *
- * @package ' . $this->get_slug() . '-hash
- */';
-	}
-
-	/**
-	 * Return the mu plugin filename.
-	 *
-	 * @return string
-	 */
-	private function get_mu_plugin_filename(): string {
-		return $this->get_slug() . '-hash.php';
-	}
-
-	/**
-	 * Create the MU-plugin, that is used as fallback if the "wp-config.php" could not be written.
-	 *
-	 * @return void
-	 */
-	protected function create_mu_plugin(): void {
-		// bail if WPMU_PLUGIN_DIR is not set.
-		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
-			return;
-		}
-
-		// get WP Filesystem-handler.
-		$wp_filesystem = Helper::get_wp_filesystem();
-
-		// create a custom must-use-plugin instead.
-		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . $this->get_hash_value() . "' ); // Added by " . $this->get_plugin_name() . ".\r\n";
-
-		// create mu-plugin directory if it is missing.
-		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {
-			$wp_filesystem->mkdir( WPMU_PLUGIN_DIR );
-		}
-
-		// define the path.
-		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename();
-
-		// save the file.
-		if ( ! $wp_filesystem->put_contents( $file_path, $file_content ) ) {
-			return;
-		}
-
-		// run the constant for this process.
-		$this->run_constant();
-	}
-
-	/**
-	 * Delete our own mu-plugin.
-	 *
-	 * @return void
-	 */
-	protected function delete_mu_plugin(): void {
-		// bail if WPMU_PLUGIN_DIR is not set.
-		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
-			return;
-		}
-
-		// get WP Filesystem-handler.
-		$wp_filesystem = Helper::get_wp_filesystem();
-
-		// bail if mu directory does not exist.
-		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {
-			return;
-		}
-
-		// define the path.
-		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename();
-
-		// delete the file.
-		$wp_filesystem->delete( $file_path );
+		return strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
 	}
 
 	/**
@@ -300,114 +193,7 @@ class Method_Base {
 	 *
 	 * @return void
 	 */
-	public function uninstall(): void {
-		// get the wp-config.php path.
-		$wp_config_php_path = Helper::get_wp_config_path( $this->get_slug() );
-
-		// bail if wp-config.php is not writable.
-		if ( ! Helper::is_writable( $wp_config_php_path ) ) {
-			// remove mu-plugin.
-			$this->delete_mu_plugin();
-			return;
-		}
-
-		// get WP Filesystem-handler.
-		$wp_filesystem = Helper::get_wp_filesystem();
-
-		// get the contents of the wp-config.php.
-		$wp_config_php_content = $wp_filesystem->get_contents( $wp_config_php_path );
-
-		// bail if file has no contents.
-		if ( ! $wp_config_php_content ) {
-			return;
-		}
-
-		// remove the value.
-		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $this->get_constant() . '["\'].*$@miU', '', $wp_config_php_content );
-
-		if ( ! is_string( $wp_config_php_content ) ) {
-			return;
-		}
-
-		// save the changed wp-config.php.
-		$wp_filesystem->put_contents( $wp_config_php_path, $wp_config_php_content );
-	}
-
-	/**
-	 * Return the plugin slug.
-	 *
-	 * @return string
-	 */
-	protected function get_slug(): string {
-		return $this->slug;
-	}
-
-	/**
-	 * Set the plugin slug.
-	 *
-	 * @param string $slug The plugin slug.
-	 * @return void
-	 */
-	public function set_slug( string $slug ): void {
-		$this->slug = $slug;
-	}
-
-	/**
-	 * Return the plugin name.
-	 *
-	 * @return string
-	 */
-	protected function get_plugin_name(): string {
-		return $this->plugin_name;
-	}
-
-	/**
-	 * Set the plugin name.
-	 *
-	 * @param string $plugin_name The plugin name.
-	 * @return void
-	 */
-	public function set_plugin_name( string $plugin_name ): void {
-		$this->plugin_name = $plugin_name;
-	}
-
-	/**
-	 * Return the plugin author.
-	 *
-	 * @return string
-	 */
-	private function get_author_name(): string {
-		return $this->plugin_author;
-	}
-
-	/**
-	 * Set the plugin author.
-	 *
-	 * @param string $plugin_author The plugin author.
-	 * @return void
-	 */
-	public function set_author_name( string $plugin_author ): void {
-		$this->plugin_author = $plugin_author;
-	}
-
-	/**
-	 * Return the plugin author URL.
-	 *
-	 * @return string
-	 */
-	private function get_author_url(): string {
-		return $this->plugin_author_url;
-	}
-
-	/**
-	 * Set the plugin author URL.
-	 *
-	 * @param string $plugin_author_url The plugin author URL.
-	 * @return void
-	 */
-	public function set_author_url( string $plugin_author_url ): void {
-		$this->plugin_author_url = $plugin_author_url;
-	}
+	public function uninstall(): void {}
 
 	/**
 	 * Set the configuration.
@@ -417,5 +203,14 @@ class Method_Base {
 	 */
 	public function set_config( array $configuration ): void {
 		$this->configuration = array_merge( $this->configuration, $configuration );
+	}
+
+	/**
+	 * Return the configured crypt object.
+	 *
+	 * @return Crypt
+	 */
+	protected function get_crypt_obj(): Crypt {
+		return $this->crypt_obj;
 	}
 }

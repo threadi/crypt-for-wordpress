@@ -33,19 +33,24 @@ class Crypt {
 	 *
 	 * @var string
 	 */
-	private string $slug = '';
+	private string $slug;
 
 	/**
 	 * The method configurations.
 	 *
-	 * @var array<string,array<string,mixed>>
+	 * @var array<string,array<string,mixed>|string>
 	 */
 	private array $configuration = array();
 
 	/**
 	 * Constructor for this object.
+	 *
+	 * @param string $plugin_path The path to the WordPress plugin using this object. E.g., __FILE__.
 	 */
-	public function __construct() {}
+	public function __construct( string $plugin_path ) {
+		$this->plugin_file = $plugin_path;
+		$this->slug        = dirname( plugin_basename( $plugin_path ) );
+	}
 
 	/**
 	 * Return the method object to use for encryption.
@@ -164,7 +169,7 @@ class Crypt {
 			}
 
 			// get the object.
-			$obj = $class_name();
+			$obj = $class_name( $this );
 
 			// bail if the object could not be loaded.
 			if ( ! $obj instanceof Method_Base ) {
@@ -177,10 +182,6 @@ class Crypt {
 			}
 
 			// add settings.
-			$obj->set_slug( $this->get_slug() );
-			$obj->set_plugin_name( $this->get_plugin_name() );
-			$obj->set_author_name( $this->get_plugin_author() );
-			$obj->set_author_url( $this->get_plugin_author_url() );
 			$obj->set_config( $this->get_method_config( $obj->get_name() ) );
 
 			// add the object to the list.
@@ -200,6 +201,9 @@ class Crypt {
 		foreach ( $this->get_methods_as_objects() as $obj ) {
 			$obj->uninstall();
 		}
+		foreach ( $this->get_places_as_object() as $obj ) {
+			$obj->uninstall();
+		}
 	}
 
 	/**
@@ -207,7 +211,7 @@ class Crypt {
 	 *
 	 * @return string
 	 */
-	private function get_slug(): string {
+	public function get_slug(): string {
 		return $this->slug;
 	}
 
@@ -245,7 +249,7 @@ class Crypt {
 	 *
 	 * @return string
 	 */
-	private function get_plugin_name(): string {
+	public function get_plugin_name(): string {
 		// get the plugin data.
 		$plugin_data = get_plugin_data( $this->get_plugin_file() );
 
@@ -263,7 +267,7 @@ class Crypt {
 	 *
 	 * @return string
 	 */
-	private function get_plugin_author(): string {
+	public function get_plugin_author(): string {
 		// get the plugin data.
 		$plugin_data = get_plugin_data( $this->get_plugin_file() );
 
@@ -281,7 +285,7 @@ class Crypt {
 	 *
 	 * @return string
 	 */
-	private function get_plugin_author_url(): string {
+	public function get_plugin_author_url(): string {
 		// get the plugin data.
 		$plugin_data = get_plugin_data( $this->get_plugin_file() );
 
@@ -300,9 +304,14 @@ class Crypt {
 	 * @param string $method_name The method name.
 	 * @return array<string,mixed>
 	 */
-	private function get_method_config( string $method_name ): array {
+	public function get_method_config( string $method_name ): array {
 		// bail if no configuration for this name is set.
 		if ( ! isset( $this->configuration[ $method_name ] ) ) {
+			return array();
+		}
+
+		// bail if configuration is not an array.
+		if ( ! is_array( $this->configuration[ $method_name ] ) ) {
 			return array();
 		}
 
@@ -311,12 +320,128 @@ class Crypt {
 	}
 
 	/**
-	 * Set method configurations.
+	 * Return the configuration.
 	 *
-	 * @param array<string,array<string,mixed>> $configurations List of configurations for the methods.
+	 * @return array<string,array<string,mixed>|string>
+	 */
+	public function get_config(): array {
+		return $this->configuration;
+	}
+
+	/**
+	 * Set custom configuration for this object.
+	 *
+	 * @param array<string,array<string,mixed>|string> $configurations List of configurations.
 	 * @return void
 	 */
-	public function set_method_config( array $configurations ): void {
+	public function set_config( array $configurations ): void {
 		$this->configuration = $configurations;
+	}
+
+	/**
+	 * Return the list of possible places where the hash could be saved.
+	 *
+	 * @return array<int,string>
+	 */
+	private function get_places(): array {
+		$places = array(
+			'CryptForWordPress\Places\WpConfig',
+			'CryptForWordPress\Places\MuPlugin',
+			'CryptForWordPress\Places\CustomFile',
+		);
+
+		/**
+		 * Filter the available places.
+		 *
+		 * @since 1.0.0 Available since 1.0.0.
+		 * @param array<int,string> $places List of methods.
+		 */
+		return apply_filters( $this->get_slug() . '_places', $places );
+	}
+
+	/**
+	 * Return the list of available places as objects.
+	 *
+	 * @return array<int,Place_Base>
+	 */
+	private function get_places_as_object(): array {
+		// bail if this is not a WordPress environment.
+		if ( ! defined( 'ABSPATH' ) ) {
+			return array();
+		}
+
+		// define the list for objects.
+		$list = array();
+
+		// get all available methods.
+		foreach ( $this->get_places() as $method_class_name ) {
+			// bail if it is not callable.
+			if ( ! class_exists( $method_class_name ) ) {
+				continue;
+			}
+
+			// get the object.
+			$obj = new $method_class_name( $this );
+
+			// bail if the object could not be loaded.
+			if ( ! $obj instanceof Place_Base ) {
+				continue;
+			}
+
+			// bail if a method is forced and this is not the forced method.
+			if ( ! empty( $this->configuration['force_place'] ) && $obj->get_name() !== $this->configuration['force_place'] ) { // @phpstan-ignore notIdentical.alwaysTrue
+				continue;
+			}
+
+			// add the object to the list.
+			$list[] = $obj;
+		}
+
+		// return the resulting list of objects.
+		return $list;
+	}
+
+	/**
+	 * Return the place where the token should be saved.
+	 *
+	 * @return false|Place_Base
+	 */
+	private function get_place(): false|Place_Base {
+		// loop through the objects to check, which one we could use.
+		foreach ( $this->get_places_as_object() as $obj ) {
+			// bail if the method is unusable.
+			if ( ! $obj->is_usable() ) {
+				continue;
+			}
+
+			// return this place object.
+			return $obj;
+		}
+
+		// return false if no usable method has been found.
+		return false;
+	}
+
+	/**
+	 * Save the given hash in the constant on the configured place.
+	 *
+	 * @param string $constant The constant to use.
+	 * @param string $hash The hash to use.
+	 * @return void
+	 */
+	public function save_in_place( string $constant, string $hash ): void {
+		// get the place to use.
+		$place_obj = $this->get_place();
+
+		// bail if no place could be loaded.
+		if ( ! $place_obj instanceof Place_Base ) {
+			return;
+		}
+
+		// Set configuration.
+		$place_obj->set_constant( $constant );
+
+		// save the hash in the place.
+		$place_obj->save( $hash );
 	}
 }
