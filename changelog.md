@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 29.03.2026
+
+### Fixed
+
+- Missing usage of hash-constant during uninstallation
+
 ## [1.1.0] - 29.03.2026
 
 ### Added

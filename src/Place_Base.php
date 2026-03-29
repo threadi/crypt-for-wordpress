@@ -92,7 +92,8 @@ class Place_Base {
 	/**
 	 * Uninstall this method.
 	 *
+	 * @param string $constant The constant to use during the uninstallation.
 	 * @return void
 	 */
-	public function uninstall(): void {}
+	public function uninstall( string $constant ): void {}
 }

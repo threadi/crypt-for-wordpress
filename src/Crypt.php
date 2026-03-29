@@ -26,7 +26,7 @@ class Crypt {
 	 *
 	 * @var string
 	 */
-	private string $plugin_file = '';
+	private string $plugin_file;
 
 	/**
 	 * The slug to use.
@@ -201,9 +201,6 @@ class Crypt {
 		foreach ( $this->get_methods_as_objects() as $obj ) {
 			$obj->uninstall();
 		}
-		foreach ( $this->get_places_as_object() as $obj ) {
-			$obj->uninstall();
-		}
 	}
 
 	/**
@@ -364,7 +361,7 @@ class Crypt {
 	 *
 	 * @return array<int,Place_Base>
 	 */
-	private function get_places_as_object(): array {
+	public function get_places_as_object(): array {
 		// bail if this is not a WordPress environment.
 		if ( ! defined( 'ABSPATH' ) ) {
 			return array();
