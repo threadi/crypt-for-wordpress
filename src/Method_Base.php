@@ -193,7 +193,11 @@ class Method_Base {
 	 *
 	 * @return void
 	 */
-	public function uninstall(): void {}
+	public function uninstall(): void {
+		foreach ( $this->get_crypt_obj()->get_places_as_object() as $obj ) {
+			$obj->uninstall( $this->get_constant() );
+		}
+	}
 
 	/**
 	 * Set the configuration.

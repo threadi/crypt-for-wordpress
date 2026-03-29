@@ -114,9 +114,10 @@ class WpConfig extends Place_Base {
 	/**
 	 * Uninstall this method.
 	 *
+	 * @param string $constant The constant to use during the uninstallation.
 	 * @return void
 	 */
-	public function uninstall(): void {
+	public function uninstall( string $constant ): void {
 		// get the wp-config.php path.
 		$wp_config_php_path = $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() );
 
@@ -137,7 +138,7 @@ class WpConfig extends Place_Base {
 		}
 
 		// remove the value.
-		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $this->get_constant() . '["\'].*$@miU', '', $wp_config_php_content );
+		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $constant . '["\'].*$@miU', '', $wp_config_php_content );
 
 		if ( ! is_string( $wp_config_php_content ) ) {
 			return;

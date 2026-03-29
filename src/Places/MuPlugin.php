@@ -102,9 +102,10 @@ class MuPlugin extends Place_Base {
 	/**
 	 * Uninstall this method.
 	 *
+	 * @param string $constant The constant to use during the uninstallation.
 	 * @return void
 	 */
-	public function uninstall(): void {
+	public function uninstall( string $constant ): void {
 		// bail if WPMU_PLUGIN_DIR is not set.
 		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
 			return;
