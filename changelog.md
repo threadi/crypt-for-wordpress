@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2] - 01.04.2026
+
+### Change
+
+- Change the default hash-algorithm from argon2 to sha256
+- Some new hooks
+
 ## [1.1.1] - 29.03.2026
 
 ### Fixed

@@ -33,8 +33,7 @@ class OpenSsl extends Method_Base {
 	 */
 	protected array $configuration = array(
 		'hash_type'        => 'hash',
-		'hash_algorithm'   => 'argon2',
-		'force_mu_plugin'  => false,
+		'hash_algorithm'   => 'sha256',
 		'cipher_algorithm' => 'AES-256-GCM',
 	);
 
