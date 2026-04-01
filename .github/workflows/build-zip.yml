@@ -18,9 +18,6 @@ jobs:
         run: |
           composer install
 
-      - name: Generate autoloader
-        run: composer dump-autoload -oa --no-dev
-
       - name: Run PHPStan analyse
         run: vendor/bin/phpstan analyse
 
@@ -29,6 +26,9 @@ jobs:
 
       - name: Run WordPress Coding Standard fixes
         run: vendor/bin/phpcbf --standard=ruleset.xml .
+
+      - name: Generate autoloader
+        run: composer install --no-dev --optimize-autoloader
 
       - uses: anchore/sbom-action@v0
 
