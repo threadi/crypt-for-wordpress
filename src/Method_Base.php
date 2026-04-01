@@ -187,13 +187,13 @@ class Method_Base {
 	protected function get_constant(): string {
 		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
 
-        /**
-         * Filter the name of the constant.
-         *
-         * @since 1.1.2 Available since 1.1.2.
-         * @param string $constant The constants name.
-         */
-        return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		/**
+		 * Filter the name of the constant.
+		 *
+		 * @since 1.1.2 Available since 1.1.2.
+		 * @param string $constant The constants name.
+		 */
+		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
 	}
 
 	/**
