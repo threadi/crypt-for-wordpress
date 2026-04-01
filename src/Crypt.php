@@ -147,9 +147,11 @@ class Crypt {
 	/**
 	 * Return the list of available methods as objects.
 	 *
+	 * @access private
+	 *
 	 * @return array<int,Method_Base>
 	 */
-	private function get_methods_as_objects(): array {
+	public function get_methods_as_objects(): array {
 		// bail if this is not a WordPress environment.
 		if ( ! defined( 'ABSPATH' ) ) {
 			return array();
@@ -401,9 +403,11 @@ class Crypt {
 	/**
 	 * Return the place where the token should be saved.
 	 *
+	 * @access private
+	 *
 	 * @return false|Place_Base
 	 */
-	private function get_place(): false|Place_Base {
+	public function get_place(): false|Place_Base {
 		// loop through the objects to check, which one we could use.
 		foreach ( $this->get_places_as_object() as $obj ) {
 			// bail if the method is unusable.

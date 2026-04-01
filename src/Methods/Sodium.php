@@ -111,6 +111,7 @@ class Sodium extends Method_Base {
 			$this->set_hash( $hash );
 		}
 
+		// save the hash on its place.
 		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
 
 		// delete the old option field.
@@ -272,7 +273,7 @@ class Sodium extends Method_Base {
 	 * @return string
 	 * @throws SodiumException On Exception through Sodium.
 	 */
-	protected function get_hash_value(): string {
+	public function get_hash_value(): string {
 		return sodium_bin2base64( $this->get_hash(), $this->get_coding_id() );
 	}
 }

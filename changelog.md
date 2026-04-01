@@ -1,10 +1,26 @@
 # Changelog
 
+## [1.2.0] - 01.04.2026
+
+### Added
+
+- Added PHP Unit Tests
+- Added code of conduct and contributing info
+
+### Change
+
+- Some new hooks
+
+### Fixed
+
+- Fixed check for a not existing "must-use"-plugin-directory, which will now create it
+
 ## [1.1.2] - 01.04.2026
 
 ### Change
 
 - Change the default hash-algorithm from argon2 to sha256
+- Optimized release build
 - Some new hooks
 
 ## [1.1.1] - 29.03.2026

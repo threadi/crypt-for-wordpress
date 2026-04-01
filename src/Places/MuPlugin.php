@@ -41,7 +41,21 @@ class MuPlugin extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return defined( 'WPMU_PLUGIN_DIR' ) && Helper::is_writable( WPMU_PLUGIN_DIR );
+		// bail if the "must use"-plugin-directory is not set.
+		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
+			return false;
+		}
+
+		// get the filesystem handler.
+		$wp_filesystem = Helper::get_wp_filesystem();
+
+		// bail if the "must use"-plugin-parent-directory is not writeable if the "must-use"-plugin-directory does not exist.
+		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) && ! Helper::is_writable( dirname( WPMU_PLUGIN_DIR ) ) ) {
+			return false;
+		}
+
+		// return the result of the check if the "must-use"-plugin-directory is writable.
+		return Helper::is_writable( WPMU_PLUGIN_DIR );
 	}
 
 	/**
