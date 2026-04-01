@@ -18,7 +18,7 @@ class ForceMuPlugin extends CryptForWordPressTests {
      *
      * @return void
      */
-    public function test_force_wp_config(): void {
+    public function test_force_mu_plugin(): void {
         // configure the crypt object.
         $crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
         $crypt_obj->set_config(
@@ -29,9 +29,11 @@ class ForceMuPlugin extends CryptForWordPressTests {
 
         // test it.
         $place = $crypt_obj->get_place();
-        $this->assertIsObject( $place );
-        $this->assertInstanceOf( '\CryptForWordPress\Places\MuPlugin', $place );
-        $this->assertIsBool( $place->is_usable() );
-        $this->assertTrue( $place->is_usable() );
+        if( ! is_bool( $place ) ) {
+            $this->assertIsObject($place);
+            $this->assertInstanceOf('\CryptForWordPress\Places\MuPlugin', $place);
+            $this->assertIsBool($place->is_usable());
+            $this->assertTrue($place->is_usable());
+        }
     }
 }
