@@ -1,0 +1,44 @@
+name: Testing
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Run tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.5', '8.4', '8.3', '8.2']
+    services:
+      database:
+        image: mysql:latest
+        env:
+          MYSQL_DATABASE: wordpress_tests
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: composer install
+
+      - name: PHPStan check
+        run: vendor/bin/phpstan analyse
+
+      - name: PHP Compatibility check
+        run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP
+
+      - name: Run WordPress Coding Standard fixes
+        run: vendor/bin/phpcbf --standard=ruleset.xml .
+
+      - name: Setup tests
+        run: bash bin/install-wp-tests.sh wordpress_tests root root 127.0.0.1 latest true
+
+      - name: Run tests
+        run: composer test
