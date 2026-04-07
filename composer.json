@@ -41,6 +41,7 @@
     "wp-phpunit/wp-phpunit": "^6.3"
   },
   "require": {
-    "ext-openssl": "*"
+    "ext-openssl": "*",
+    "ext-sodium": "*"
   }
 }

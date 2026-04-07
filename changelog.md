@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1] - 07.04.2026
+
+### Fixed
+
+- Fixed a bug with the multiple usage of this library in one project
+
 ## [1.2.0] - 01.04.2026
 
 ### Added

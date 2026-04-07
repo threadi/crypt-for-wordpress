@@ -162,32 +162,29 @@ class Crypt {
 
 		// get all available methods.
 		foreach ( $this->get_available_methods() as $method_class_name ) {
-			// create the classname.
-			$class_name = $method_class_name . '::get_instance';
+            // bail if it is not callable.
+            if ( ! class_exists( $method_class_name ) ) {
+                continue;
+            }
 
-			// bail if it is not callable.
-			if ( ! is_callable( $class_name ) ) {
-				continue;
-			}
+            // get the object.
+            $obj = new $method_class_name( $this );
 
-			// get the object.
-			$obj = $class_name( $this );
+            // bail if the object could not be loaded.
+            if ( ! $obj instanceof Method_Base ) {
+                continue;
+            }
 
-			// bail if the object could not be loaded.
-			if ( ! $obj instanceof Method_Base ) {
-				continue;
-			}
+            // bail if a method is forced and this is not the forced method.
+            if ( ! empty( $this->configuration['force_method'] ) && $obj->get_name() !== $this->configuration['force_method'] ) { // @phpstan-ignore notIdentical.alwaysTrue
+                continue;
+            }
 
-			// bail if a method is forced and this is not the forced method.
-			if ( ! empty( $this->configuration['force_method'] ) && $obj->get_name() !== $this->configuration['force_method'] ) { // @phpstan-ignore notIdentical.alwaysTrue
-				continue;
-			}
+            // add settings.
+            $obj->set_config( $this->get_method_config( $obj->get_name() ) );
 
-			// add settings.
-			$obj->set_config( $this->get_method_config( $obj->get_name() ) );
-
-			// add the object to the list.
-			$list[] = $obj;
+            // add the object to the list.
+            $list[] = $obj;
 		}
 
 		// return the resulting list of objects.

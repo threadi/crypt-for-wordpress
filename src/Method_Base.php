@@ -40,23 +40,7 @@ class Method_Base {
 	 *
 	 * @var Crypt
 	 */
-	private Crypt $crypt_obj;
-
-	/**
-	 * Constructor for this object.
-	 *
-	 * @param Crypt $crypt_obj The crypt object.
-	 */
-	protected function __construct( Crypt $crypt_obj ) {
-		$this->crypt_obj = $crypt_obj;
-	}
-
-	/**
-	 * Prevent cloning of this object.
-	 *
-	 * @return void
-	 */
-	protected function __clone() {}
+	protected Crypt $crypt_obj;
 
 	/**
 	 * Initialize this crypt method.
