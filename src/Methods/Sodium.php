@@ -43,14 +43,14 @@ class Sodium extends Method_Base {
 		'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen',
 	);
 
-    /**
-     * Initialize the object.
-     *
-     * @param Crypt $crypt_obj The crypt object.
-     */
-    public function __construct( Crypt $crypt_obj ) {
-        $this->crypt_obj = $crypt_obj;
-    }
+	/**
+	 * Initialize the object.
+	 *
+	 * @param Crypt $crypt_obj The crypt object.
+	 */
+	public function __construct( Crypt $crypt_obj ) {
+		$this->crypt_obj = $crypt_obj;
+	}
 
 	/**
 	 * Initiate this method.

@@ -37,14 +37,14 @@ class OpenSsl extends Method_Base {
 		'cipher_algorithm' => 'AES-256-GCM',
 	);
 
-    /**
-     * Initialize the object.
-     *
-     * @param Crypt $crypt_obj The crypt object.
-     */
-    public function __construct( Crypt $crypt_obj ) {
-        $this->crypt_obj = $crypt_obj;
-    }
+	/**
+	 * Initialize the object.
+	 *
+	 * @param Crypt $crypt_obj The crypt object.
+	 */
+	public function __construct( Crypt $crypt_obj ) {
+		$this->crypt_obj = $crypt_obj;
+	}
 
 	/**
 	 * Constructor for this object.
