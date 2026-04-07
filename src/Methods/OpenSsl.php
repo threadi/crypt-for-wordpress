@@ -37,31 +37,20 @@ class OpenSsl extends Method_Base {
 		'cipher_algorithm' => 'AES-256-GCM',
 	);
 
-	/**
-	 * Instance of this object.
-	 *
-	 * @var ?OpenSsl
-	 */
-	private static ?OpenSsl $instance = null;
-
-	/**
-	 * Return the instance of this Singleton object.
-	 *
-	 * @param Crypt $crypt_obj The crypt object.
-	 */
-	public static function get_instance( Crypt $crypt_obj ): OpenSsl {
-		if ( is_null( self::$instance ) ) {
-			self::$instance = new self( $crypt_obj );
-		}
-
-		return self::$instance;
-	}
+    /**
+     * Initialize the object.
+     *
+     * @param Crypt $crypt_obj The crypt object.
+     */
+    public function __construct( Crypt $crypt_obj ) {
+        $this->crypt_obj = $crypt_obj;
+    }
 
 	/**
 	 * Constructor for this object.
 	 *
 	 * @return void
-	 * @throws RuntimeException If error occurred.
+	 * @throws RuntimeException If an error occurred.
 	 */
 	public function init(): void {
 		$this->set_hash( $this->get_hash_value_from_constant() );
@@ -76,12 +65,12 @@ class OpenSsl extends Method_Base {
 
 		// if no hash is set, create one.
 		if ( empty( $this->get_hash() ) ) {
-			// bail if configured hash algorithm does not exist.
+			// bail if the configured hash algorithm does not exist.
 			if ( ! in_array( $this->configuration['hash_algorithm'], hash_algos(), true ) ) {
 				throw new RuntimeException( 'Unknown hash algorithm: ' . wp_kses_post( $this->configuration['hash_algorithm'] ) );
 			}
 
-			// bail if hash type is unknown.
+			// bail if the hash type is unknown.
 			if ( ! in_array( $this->configuration['hash_type'], array( 'hash', 'hash_pbkdf2' ), true ) ) {
 				throw new RuntimeException( 'Unknown hash type: ' . wp_kses_post( $this->configuration['hash_type'] ) );
 			}
@@ -108,11 +97,11 @@ class OpenSsl extends Method_Base {
 				);
 			}
 
-			// set resulting hash.
+			// set the resulting hash.
 			$this->set_hash( $hash );
 		}
 
-		// save the hash on its place.
+		// save the hash in its place.
 		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash() );
 
 		// delete the old option field.
@@ -138,7 +127,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @param string $plain_text Text to encrypt.
 	 *
-	 * @throws RuntimeException If error occurred.
+	 * @throws RuntimeException If an error occurred.
 	 */
 	public function encrypt( string $plain_text ): string {
 		// bail if slug is not set.
@@ -294,7 +283,7 @@ class OpenSsl extends Method_Base {
 				$tag
 			);
 
-			// bail if decryption was not successfully.
+			// bail if decryption was not successful.
 			if ( ! is_string( $original_plaintext ) ) {
 				return '';
 			}
@@ -328,7 +317,7 @@ class OpenSsl extends Method_Base {
 				// get HMAC.
 				$hmac = substr( $c, 0, $sha2len = 32 );
 
-				// get the raw ciper text.
+				// get the raw cipher text.
 				$ciphertext_raw = substr( $c, $sha2len, strlen( $c ) );
 			} else {
 				$iv             = substr( $c, 0, $iv_length );
@@ -339,7 +328,7 @@ class OpenSsl extends Method_Base {
 			// decrypt the string.
 			$original_plaintext = openssl_decrypt( $ciphertext_raw, $cipher, $this->get_hash(), OPENSSL_RAW_DATA, $iv );
 
-			// bail if decryption was not successfully.
+			// bail if decryption was not successful.
 			if ( ! is_string( $original_plaintext ) ) {
 				return '';
 			}
@@ -379,7 +368,7 @@ class OpenSsl extends Method_Base {
 	}
 
 	/**
-	 * Return whether the given cipher should use AEAD with tag.
+	 * Return whether the given cipher should use AEAD with a tag.
 	 *
 	 * @param string $cipher The cipher name.
 	 * @return bool

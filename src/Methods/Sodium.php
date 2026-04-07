@@ -43,25 +43,14 @@ class Sodium extends Method_Base {
 		'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen',
 	);
 
-	/**
-	 * Instance of this object.
-	 *
-	 * @var ?Sodium
-	 */
-	private static ?Sodium $instance = null;
-
-	/**
-	 * Return the instance of this Singleton object.
-	 *
-	 * @param Crypt $crypt_obj The crypt object.
-	 */
-	public static function get_instance( Crypt $crypt_obj ): Sodium {
-		if ( is_null( self::$instance ) ) {
-			self::$instance = new self( $crypt_obj );
-		}
-
-		return self::$instance;
-	}
+    /**
+     * Initialize the object.
+     *
+     * @param Crypt $crypt_obj The crypt object.
+     */
+    public function __construct( Crypt $crypt_obj ) {
+        $this->crypt_obj = $crypt_obj;
+    }
 
 	/**
 	 * Initiate this method.
@@ -85,7 +74,7 @@ class Sodium extends Method_Base {
 
 		// if no hash is set, create one.
 		if ( empty( $this->get_hash() ) ) {
-			// get the hash depending on setting.
+			// get the hash depending on the setting.
 			switch ( $this->configuration['hash_type'] ) {
 				case 'sodium_crypto_secretbox_keygen':
 					$hash = sodium_crypto_secretbox_keygen();
@@ -111,7 +100,7 @@ class Sodium extends Method_Base {
 			$this->set_hash( $hash );
 		}
 
-		// save the hash on its place.
+		// save the hash in its place.
 		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
 
 		// delete the old option field.
@@ -133,7 +122,7 @@ class Sodium extends Method_Base {
 		 * Filter the name of the constant.
 		 *
 		 * @since 1.1.2 Available since 1.1.2.
-		 * @param string $constant The constants name.
+		 * @param string $constant The constant name.
 		 */
 		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
 	}
@@ -155,7 +144,7 @@ class Sodium extends Method_Base {
 	 * @param string $plain_text The plain string.
 	 *
 	 * @return string
-	 * @throws RuntimeException If error occurred.
+	 * @throws RuntimeException If an error occurred.
 	 */
 	public function encrypt( string $plain_text ): string {
 		// bail if slug is not set.
@@ -196,7 +185,7 @@ class Sodium extends Method_Base {
 	 * @param string $encrypted_text The encrypted string.
 	 *
 	 * @return string
-	 * @throws RuntimeException If error occurred.
+	 * @throws RuntimeException If an error occurred.
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
@@ -228,7 +217,7 @@ class Sodium extends Method_Base {
 				$decrypted = sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
 			}
 
-			// bail if decrypted text is not a string.
+			// bail if the decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
 				return '';
 			}
