@@ -353,6 +353,8 @@ class Crypt {
 			'CryptForWordPress\Places\WpConfig',
 			'CryptForWordPress\Places\MuPlugin',
 			'CryptForWordPress\Places\CustomFile',
+			'CryptForWordPress\Places\EnvironmentVariable',
+			'CryptForWordPress\Places\ServerVariable',
 		);
 
 		/**

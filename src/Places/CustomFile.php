@@ -7,8 +7,7 @@
  * - 'custom_file_path' => '/your/absolute/path/to/creds.php',
  *
  * Hint:
- * - File must be a PHP file.
- * - This file must be included in WordPress to get loaded.
+ * - This file will be embedded by this package on load.
  *
  * @package crypt-for-wordpress
  */
@@ -23,7 +22,7 @@ use CryptForWordPress\Helper;
 use CryptForWordPress\Place_Base;
 
 /**
- * Object to handle the wp-config.php as place to save the key.
+ * Object to handle a custom file as place to save the key.
  */
 class CustomFile extends Place_Base {
 
