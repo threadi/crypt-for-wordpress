@@ -43,12 +43,12 @@ class DefaultSettings extends CryptForWordPressTests {
         $method = $this->crypt_obj->get_method();
         $this->assertIsObject( $method );
         if( $openssl_is_available ) {
-            $this->assertEquals( \CryptForWordPress\Methods\OpenSsl::get_instance( $this->crypt_obj ), $method );
-            $this->assertNotEquals( \CryptForWordPress\Methods\Sodium::get_instance( $this->crypt_obj ), $method );
+            $this->assertInstanceOf( 'CryptForWordPress\Methods\OpenSsl', $method );
+            $this->assertNotInstanceOf( 'CryptForWordPress\Methods\Sodium', $method );
         }
         else {
-            $this->assertNotEquals( \CryptForWordPress\Methods\OpenSsl::get_instance( $this->crypt_obj ), $method );
-            $this->assertEquals( \CryptForWordPress\Methods\Sodium::get_instance( $this->crypt_obj ), $method );
+            $this->assertNotInstanceOf( 'CryptForWordPress\Methods\OpenSsl', $method );
+            $this->assertInstanceOf( 'CryptForWordPress\Methods\Sodium', $method );
         }
     }
 

@@ -14,6 +14,10 @@
 
 - Load a given custom file before the method will be loaded to embed its constants
 
+### Fixed
+
+- Fixed the check if the parent "must-use"-directory is writable
+
 ## [1.2.1] - 07.04.2026
 
 ### Fixed
