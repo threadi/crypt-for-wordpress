@@ -8,6 +8,8 @@
 namespace CryptForWordPress;
 
 // prevent direct access.
+use CryptForWordPress\Places\CustomFile;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -61,6 +63,13 @@ class Crypt {
 		if ( $this->method instanceof Method_Base ) {
 			return $this->method;
 		}
+
+		// get the place object.
+		$place_obj = $this->get_place();
+		if ( ! $place_obj instanceof Place_Base ) {
+			return false;
+		}
+		$place_obj->load();
 
 		// loop through the objects to check, which one we could use.
 		foreach ( $this->get_methods_as_objects() as $obj ) {
@@ -344,6 +353,8 @@ class Crypt {
 			'CryptForWordPress\Places\WpConfig',
 			'CryptForWordPress\Places\MuPlugin',
 			'CryptForWordPress\Places\CustomFile',
+			'CryptForWordPress\Places\EnvironmentVariable',
+			'CryptForWordPress\Places\ServerVariable',
 		);
 
 		/**
@@ -441,5 +452,33 @@ class Crypt {
 
 		// save the hash in the place.
 		$place_obj->save( $hash );
+	}
+
+	/**
+	 * Return the used settings for debug purposes.
+	 *
+	 * @return array<string,array<string,mixed>|string>
+	 */
+	public function debug(): array {
+		// get the place.
+		$place      = $this->get_place();
+		$place_name = '';
+		if ( $place instanceof Place_Base ) {
+			$place_name = $place->get_name();
+		}
+
+		// get the method.
+		$method      = $this->get_method();
+		$method_name = '';
+		if ( $method instanceof Method_Base ) {
+			$method_name = $method->get_name();
+		}
+
+		// return the settings.
+		return array(
+			'configuration' => $this->get_config(),
+			'place'         => $place_name,
+			'method'        => $method_name,
+		);
 	}
 }
