@@ -28,7 +28,7 @@ use CryptForWordPress\Place_Base;
 class CustomFile extends Place_Base {
 
 	/**
-	 * Name of the method.
+	 * Name of the place.
 	 *
 	 * @var string
 	 */
@@ -94,4 +94,30 @@ class CustomFile extends Place_Base {
 		// save the changed wp-config.php.
 		$wp_filesystem->put_contents( $config['custom_file_path'], $wp_config_php_content ); // @phpstan-ignore argument.type
 	}
+
+    /**
+     * Load this places environments before the crypt method is used.
+     *
+     * @return void
+     */
+    public function load(): void {
+        // get the configuration.
+        $config = $this->get_crypt_obj()->get_config();
+
+        // bail if no file path is given.
+        if ( empty( $config['custom_file_path'] ) ) {
+            return;
+        }
+
+        // get the WP_Filesystem object.
+        $wp_filesystem = Helper::get_wp_filesystem();
+
+        // bail if the file does not exist.
+        if( ! $wp_filesystem->exists( $config['custom_file_path'] ) ) {
+            return;
+        }
+
+        // embed the given file.
+        require_once $config['custom_file_path'];
+    }
 }

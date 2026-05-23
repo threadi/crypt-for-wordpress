@@ -8,6 +8,8 @@
 namespace CryptForWordPress;
 
 // prevent direct access.
+use CryptForWordPress\Places\CustomFile;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -61,6 +63,13 @@ class Crypt {
 		if ( $this->method instanceof Method_Base ) {
 			return $this->method;
 		}
+
+        // get the place object.
+        $place_obj = $this->get_place();
+        if( ! $place_obj instanceof Place_Base ) {
+            return false;
+        }
+        $place_obj->load();
 
 		// loop through the objects to check, which one we could use.
 		foreach ( $this->get_methods_as_objects() as $obj ) {

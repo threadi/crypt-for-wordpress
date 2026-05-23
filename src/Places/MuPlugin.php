@@ -20,7 +20,7 @@ use CryptForWordPress\Place_Base;
 class MuPlugin extends Place_Base {
 
 	/**
-	 * Name of the method.
+	 * Name of the place.
 	 *
 	 * @var string
 	 */
@@ -114,7 +114,7 @@ class MuPlugin extends Place_Base {
 	}
 
 	/**
-	 * Uninstall this method.
+	 * Uninstall this place.
 	 *
 	 * @param string $constant The constant to use during the uninstallation.
 	 * @return void

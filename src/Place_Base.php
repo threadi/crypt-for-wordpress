@@ -90,10 +90,17 @@ class Place_Base {
 	}
 
 	/**
-	 * Uninstall this method.
+	 * Uninstall this place.
 	 *
 	 * @param string $constant The constant to use during the uninstallation.
 	 * @return void
 	 */
 	public function uninstall( string $constant ): void {}
+
+    /**
+     * Load this places environments before the crypt method is used.
+     *
+     * @return void
+     */
+    public function load(): void {}
 }

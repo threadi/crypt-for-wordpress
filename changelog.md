@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Load a given custom file before the method will be loaded to embed its constants
+
 ## [1.2.1] - 07.04.2026
 
 ### Fixed
