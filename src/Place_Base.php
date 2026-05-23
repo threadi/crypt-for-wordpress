@@ -97,10 +97,10 @@ class Place_Base {
 	 */
 	public function uninstall( string $constant ): void {}
 
-    /**
-     * Load this places environments before the crypt method is used.
-     *
-     * @return void
-     */
-    public function load(): void {}
+	/**
+	 * Load this places environments before the crypt method is used.
+	 *
+	 * @return void
+	 */
+	public function load(): void {}
 }

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the function debug() to return the actual configuration for debugging purposes
+
 ### Changed
 
 - Load a given custom file before the method will be loaded to embed its constants

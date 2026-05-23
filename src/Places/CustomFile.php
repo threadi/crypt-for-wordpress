@@ -57,6 +57,11 @@ class CustomFile extends Place_Base {
 			return false;
 		}
 
+		// bail if given value is not a string.
+		if ( ! is_string( $config['custom_file_path'] ) ) {
+			return false;
+		}
+
 		// check if it is writable.
 		return Helper::is_writable( dirname( $config['custom_file_path'] ) ); // @phpstan-ignore argument.type
 	}
@@ -95,29 +100,34 @@ class CustomFile extends Place_Base {
 		$wp_filesystem->put_contents( $config['custom_file_path'], $wp_config_php_content ); // @phpstan-ignore argument.type
 	}
 
-    /**
-     * Load this places environments before the crypt method is used.
-     *
-     * @return void
-     */
-    public function load(): void {
-        // get the configuration.
-        $config = $this->get_crypt_obj()->get_config();
+	/**
+	 * Load this places environments before the crypt method is used.
+	 *
+	 * @return void
+	 */
+	public function load(): void {
+		// get the configuration.
+		$config = $this->get_crypt_obj()->get_config();
 
-        // bail if no file path is given.
-        if ( empty( $config['custom_file_path'] ) ) {
-            return;
-        }
+		// bail if no file path is given.
+		if ( empty( $config['custom_file_path'] ) ) {
+			return;
+		}
 
-        // get the WP_Filesystem object.
-        $wp_filesystem = Helper::get_wp_filesystem();
+		// bail if given value is not a string.
+		if ( ! is_string( $config['custom_file_path'] ) ) {
+			return;
+		}
 
-        // bail if the file does not exist.
-        if( ! $wp_filesystem->exists( $config['custom_file_path'] ) ) {
-            return;
-        }
+		// get the WP_Filesystem object.
+		$wp_filesystem = Helper::get_wp_filesystem();
 
-        // embed the given file.
-        require_once $config['custom_file_path'];
-    }
+		// bail if the file does not exist.
+		if ( ! $wp_filesystem->exists( $config['custom_file_path'] ) ) {
+			return;
+		}
+
+		// embed the given file.
+		require_once $config['custom_file_path'];
+	}
 }
