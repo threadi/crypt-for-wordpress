@@ -12,6 +12,7 @@ defined( 'ABSPATH' ) || exit;
 
 use CryptForWordPress\Crypt;
 use CryptForWordPress\Method_Base;
+use Exception;
 use RuntimeException;
 
 /**
@@ -80,21 +81,29 @@ class OpenSsl extends Method_Base {
 
 			// use hash() to generate the hash.
 			if ( 'hash' === $this->configuration['hash_type'] ) {
-				$hash = hash( $this->configuration['hash_algorithm'], (string) wp_rand() );
+				try {
+					$hash = hash( $this->configuration['hash_algorithm'], random_bytes( 32 ) );
+				} catch ( Exception $e ) {
+					throw new RuntimeException( 'Secure random number source not available – Installation cannot be initialized securely: ' . wp_kses_post( $e->getMessage() ) );
+				}
 			}
 
 			// use hash_pbkdf2() to generate the hash.
 			if ( 'hash_pbkdf2' === $this->configuration['hash_type'] ) {
-				$hash = base64_encode(
-					hash_pbkdf2(
-						$this->configuration['hash_algorithm'],
-						(string) wp_rand(),
-						wp_salt(),
-						150000,
-						32,
-						true
-					)
-				);
+				try {
+					$hash = base64_encode(
+						hash_pbkdf2(
+							$this->configuration['hash_algorithm'],
+							random_bytes( 32 ),
+							wp_salt(),
+							150000,
+							32,
+							true
+						)
+					);
+				} catch ( Exception $e ) {
+					throw new RuntimeException( 'Secure random number source not available – Installation cannot be initialized securely: ' . wp_kses_post( $e->getMessage() ) );
+				}
 			}
 
 			// set the resulting hash.
@@ -162,12 +171,15 @@ class OpenSsl extends Method_Base {
 		}
 
 		// get the iv.
-		$iv = openssl_random_pseudo_bytes( $iv_length );
+		$iv = openssl_random_pseudo_bytes( $iv_length, $crypto_strong );
 
 		// bail if iv could not be created.
-		if ( ! $iv ) {
+		if ( ! $iv || ! $crypto_strong ) {
 			return '';
 		}
+
+		// get the hash depending on used hash type.
+		$hash = $this->get_decoded_master_key();
 
 		// handle GCM-based ciphers.
 		if ( $this->should_use_aead_tag( $cipher ) ) {
@@ -178,7 +190,7 @@ class OpenSsl extends Method_Base {
 			$ciphertext = openssl_encrypt(
 				$plain_text,
 				$cipher,
-				$this->get_hash(),
+				$hash,
 				OPENSSL_RAW_DATA,
 				$iv,
 				$tag
@@ -198,11 +210,15 @@ class OpenSsl extends Method_Base {
 		} else {
 			// for all others ciphers.
 
+			// get two keys from the main key.
+			$enc_key  = $this->derive_key( 'encryption', 32, $hash );
+			$hmac_key = $this->derive_key( 'authentication', 32, $hash );
+
 			// encrypt the string.
 			$ciphertext_raw = openssl_encrypt(
 				$plain_text,
 				$cipher,
-				$this->get_hash(),
+				$enc_key,
 				OPENSSL_RAW_DATA,
 				$iv
 			);
@@ -213,7 +229,7 @@ class OpenSsl extends Method_Base {
 			}
 
 			// get the HMAC.
-			$hmac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $this->get_hash(), true );
+			$hmac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
 
 			// return the resulting encrypted string.
 			return base64_encode( base64_encode( $iv ) . ':' . base64_encode( $hmac . $ciphertext_raw ) );
@@ -226,7 +242,7 @@ class OpenSsl extends Method_Base {
 	 * @param string $encrypted_text The encrypted string.
 	 *
 	 * @return string
-	 * @throws RuntimeException If cipher is unknown.
+	 * @throws RuntimeException If cipher is unknown or the stored key is invalid.
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
@@ -263,6 +279,9 @@ class OpenSsl extends Method_Base {
 		// decode the encrypted text.
 		$c = base64_decode( $encrypted_text );
 
+		// get the hash depending on used hash type.
+		$hash = $this->get_decoded_master_key();
+
 		// handle GCM-based ciphers.
 		if ( $this->should_use_aead_tag( $cipher ) ) {
 			// get the parts.
@@ -277,7 +296,7 @@ class OpenSsl extends Method_Base {
 			$original_plaintext = openssl_decrypt(
 				$ciphertext,
 				$cipher,
-				$this->get_hash(),
+				$hash,
 				OPENSSL_RAW_DATA,
 				$iv,
 				$tag
@@ -289,6 +308,10 @@ class OpenSsl extends Method_Base {
 			}
 		} else {
 			// for all other ciphers.
+
+			// get two keys from the main key.
+			$enc_key  = $this->derive_key( 'encryption', 32, $hash );
+			$hmac_key = $this->derive_key( 'authentication', 32, $hash );
 
 			// backwards-compatibility for strings that does not contain ":".
 			if ( str_contains( $c, ':' ) ) {
@@ -314,8 +337,11 @@ class OpenSsl extends Method_Base {
 					return '';
 				}
 
+				// get the sha2 length.
+				$sha2len = strlen( hash( $this->configuration['hash_algorithm'], '', true ) );
+
 				// get HMAC.
-				$hmac = substr( $c, 0, $sha2len = 32 );
+				$hmac = substr( $c, 0, $sha2len );
 
 				// get the raw cipher text.
 				$ciphertext_raw = substr( $c, $sha2len, strlen( $c ) );
@@ -325,24 +351,16 @@ class OpenSsl extends Method_Base {
 				$ciphertext_raw = substr( $c, $iv_length + $sha2len );
 			}
 
-			// decrypt the string.
-			$original_plaintext = openssl_decrypt( $ciphertext_raw, $cipher, $this->get_hash(), OPENSSL_RAW_DATA, $iv );
+			// try the new key-separation scheme first.
+			$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $enc_key, $hmac_key );
 
-			// bail if decryption was not successful.
-			if ( ! is_string( $original_plaintext ) ) {
-				return '';
+			// fall back to the legacy single-key scheme for data encrypted before key separation.
+			if ( '' === $original_plaintext ) {
+				$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $hash, $hash );
 			}
 
-			// get the hashed HMAC.
-			$calc_mac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $this->get_hash(), true );
-
-			// bail if HMAC is not set.
-			if ( empty( $hmac ) ) {
-				return '';
-			}
-
-			// bail if HMAC does not match.
-			if ( ! hash_equals( $hmac, $calc_mac ) ) {
+			// bail if both attempts failed.
+			if ( '' === $original_plaintext ) {
 				return '';
 			}
 		}
@@ -375,5 +393,88 @@ class OpenSsl extends Method_Base {
 	 */
 	private function should_use_aead_tag( string $cipher ): bool {
 		return str_contains( strtolower( $cipher ), 'gcm' ) || str_contains( strtolower( $cipher ), 'poly1305' );
+	}
+
+	/**
+	 * Derive a purpose-specific sub-key from the master secret via HKDF.
+	 *
+	 * @param string $purpose The context label (e.g. 'encryption', 'authentication').
+	 * @param int    $length Desired key length in bytes.
+	 * @param string $hash The hash to use.
+	 *
+	 * @phpstan-param int<0, max> $length
+	 *
+	 * @return string
+	 */
+	private function derive_key( string $purpose, int $length, string $hash ): string {
+		// return the hash for the given purpose.
+		return hash_hkdf(
+			$this->configuration['hash_algorithm'],
+			$hash,
+			$length,
+			$purpose
+		);
+	}
+
+	/**
+	 * Try to decrypt and verify a non-AEAD ciphertext with a given key pair.
+	 *
+	 * @param string $cipher          The cipher algorithm.
+	 * @param string $ciphertext_raw  The raw ciphertext.
+	 * @param string $iv              The IV.
+	 * @param string $hmac            The stored HMAC to verify against.
+	 * @param string $enc_key         Key used for decryption.
+	 * @param string $hmac_key        Key used for HMAC verification.
+	 *
+	 * @return string The decrypted plaintext, or '' on failure.
+	 */
+	private function try_decrypt_non_aead( string $cipher, string $ciphertext_raw, string $iv, string $hmac, string $enc_key, string $hmac_key ): string {
+		// get the plain text.
+		$plaintext = openssl_decrypt( $ciphertext_raw, $cipher, $enc_key, OPENSSL_RAW_DATA, $iv );
+
+		// bail if no text could be read.
+		if ( ! is_string( $plaintext ) ) {
+			return '';
+		}
+
+		// bail if hmac is empty.
+		if ( empty( $hmac ) ) {
+			return '';
+		}
+
+		// get the calculated mac.
+		$calc_mac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
+
+		// bail if hmac und calculated mac does not match.
+		if ( ! hash_equals( $hmac, $calc_mac ) ) {
+			return '';
+		}
+
+		// return the plain text.
+		return $plaintext;
+	}
+
+	/**
+	 * Return the decoded master key as raw bytes, depending on the configured hash type.
+	 *
+	 * @return string
+	 *
+	 * @throws RuntimeException If the stored key cannot be decoded.
+	 */
+	private function get_decoded_master_key(): string {
+		// get hash depending on used type.
+		if ( 'hash_pbkdf2' === $this->configuration['hash_type'] ) {
+			$decoded = base64_decode( $this->get_hash(), true );
+		} else {
+			$decoded = hex2bin( $this->get_hash() );
+		}
+
+		// bail on any error.
+		if ( ! is_string( $decoded ) || '' === $decoded ) {
+			throw new RuntimeException( 'Stored encryption key is invalid or corrupted.' );
+		}
+
+		// return the decoded hash.
+		return $decoded;
 	}
 }
