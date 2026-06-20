@@ -14,7 +14,7 @@
 
 - Load a given custom file before the method will be loaded to embed its constants
 - Replaced usage of wp_rand() with the more secure random_bytes()
-- Hardening usage of OpenSSL
+- Hardening usage of OpenSSL and Sodium
 
 ### Fixed
 

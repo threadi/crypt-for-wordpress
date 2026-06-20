@@ -44,6 +44,30 @@ class Sodium extends Method_Base {
 	);
 
 	/**
+	 * Algorithm-tier identifiers used as a single-byte prefix in the
+	 * encrypted payload, so decrypt() always knows, which algorithm and
+	 * nonce length were used - independent of what the *current* server
+	 * happens to support. This is what makes values portable across
+	 * server migrations / libsodium upgrades.
+	 */
+	private const ALGO_AEGIS256          = 1;
+	private const ALGO_AES256GCM         = 2;
+	private const ALGO_XCHACHA20POLY1305 = 3;
+	private const ALGO_CHACHA20POLY1305  = 4;
+
+	/**
+	 * Nonce lengths per algorithm tier, in bytes.
+	 *
+	 * @var array<int,int>
+	 */
+	private const NONCE_LENGTHS = array(
+		self::ALGO_AEGIS256          => 32, // SODIUM_CRYPTO_AEAD_AEGIS256_NPUBBYTES.
+		self::ALGO_AES256GCM         => 12, // SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES.
+		self::ALGO_XCHACHA20POLY1305 => 24, // SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES.
+		self::ALGO_CHACHA20POLY1305  => 8,  // SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES.
+	);
+
+	/**
 	 * Initialize the object.
 	 *
 	 * @param Crypt $crypt_obj The crypt object.
@@ -137,6 +161,106 @@ class Sodium extends Method_Base {
 	}
 
 	/**
+	 * Determine the best available AEAD algorithm tier on this server.
+	 *
+	 * Order of preference: AEGIS-256 (fastest, libsodium >= 1.0.19) >
+	 * AES-256-GCM (fast, but only if hardware-accelerated) > XChaCha20-
+	 * Poly1305-IETF (safe default, no hardware dependency) >
+	 * ChaCha20-Poly1305-IETF (legacy fallback).
+	 *
+	 * @return int One of the self::ALGO_* constants.
+	 */
+	private function detect_algorithm(): int {
+		// use aegis256.
+		if ( function_exists( 'sodium_crypto_aead_aegis256_encrypt' ) ) {
+			return self::ALGO_AEGIS256;
+		}
+
+		// use aes256gcm.
+		if ( function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && function_exists( 'sodium_crypto_aead_aes256gcm_is_available' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
+			return self::ALGO_AES256GCM;
+		}
+
+		// use xchacha20poly1305.
+		if ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' ) ) {
+			return self::ALGO_XCHACHA20POLY1305;
+		}
+
+		// return the default value.
+		return self::ALGO_CHACHA20POLY1305;
+	}
+
+	/**
+	 * Encrypt raw bytes with a given algorithm tier.
+	 *
+	 * @param int    $algorithm One of the self::ALGO_* constants.
+	 * @param string $plain_text The plain string.
+	 * @param string $nonce The nonce to use (already correctly sized).
+	 *
+	 * @return string|false The ciphertext, or false if the algorithm is unavailable.
+	 * @throws SodiumException Could throw sodium exception.
+	 */
+	private function encrypt_with( int $algorithm, string $plain_text, string $nonce ): false|string {
+		switch ( $algorithm ) {
+			case self::ALGO_AEGIS256:
+				return function_exists( 'sodium_crypto_aead_aegis256_encrypt' )
+					? sodium_crypto_aead_aegis256_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					: false;
+			case self::ALGO_AES256GCM:
+				return function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' )
+					? sodium_crypto_aead_aes256gcm_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					: false;
+			case self::ALGO_XCHACHA20POLY1305:
+				return function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' )
+					? sodium_crypto_aead_xchacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					: false;
+			case self::ALGO_CHACHA20POLY1305:
+				return function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_encrypt' )
+					? sodium_crypto_aead_chacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					: false;
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Decrypt raw bytes with a given algorithm tier.
+	 *
+	 * @param int    $algorithm One of the self::ALGO_* constants.
+	 * @param string $ciphertext The ciphertext.
+	 * @param string $nonce The nonce (already correctly sized for this algorithm).
+	 *
+	 * @return string|false The plaintext, or false if it could not be decrypted.
+	 * @throws SodiumException|RuntimeException Could throw exception.
+	 */
+	private function decrypt_with( int $algorithm, string $ciphertext, string $nonce ): false|string {
+		switch ( $algorithm ) {
+			case self::ALGO_AEGIS256:
+				if ( ! function_exists( 'sodium_crypto_aead_aegis256_decrypt' ) ) {
+					throw new RuntimeException( 'AEGIS-256 wird von diesem Server nicht unterstützt (libsodium-Upgrade nötig), kann diesen Wert aber nicht entschlüsseln.' );
+				}
+				return sodium_crypto_aead_aegis256_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+			case self::ALGO_AES256GCM:
+				if ( ! function_exists( 'sodium_crypto_aead_aes256gcm_decrypt' ) ) {
+					throw new RuntimeException( 'AES-256-GCM wird von diesem Server nicht unterstützt, kann diesen Wert aber nicht entschlüsseln.' );
+				}
+				return sodium_crypto_aead_aes256gcm_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+			case self::ALGO_XCHACHA20POLY1305:
+				if ( ! function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt' ) ) {
+					throw new RuntimeException( 'XChaCha20-Poly1305 wird von diesem Server nicht unterstützt, kann diesen Wert aber nicht entschlüsseln.' );
+				}
+				return sodium_crypto_aead_xchacha20poly1305_ietf_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+			case self::ALGO_CHACHA20POLY1305:
+				if ( ! function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt' ) ) {
+					throw new RuntimeException( 'ChaCha20-Poly1305 wird von diesem Server nicht unterstützt, kann diesen Wert aber nicht entschlüsseln.' );
+				}
+				return sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+			default:
+				throw new RuntimeException( 'Unbekanntes Algorithmus-Tier im verschlüsselten Wert.' );
+		}
+	}
+
+	/**
 	 * Encrypt a given string.
 	 *
 	 * @access private
@@ -158,24 +282,28 @@ class Sodium extends Method_Base {
 		}
 
 		try {
-			// generate a nonce.
-			$nonce = random_bytes( SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES );
+			// pick the best algorithm tier this server actually supports.
+			$algorithm = $this->detect_algorithm();
 
-			// get the encrypted text depending on the supported sodium methods.
-			$encrypted_text = '';
-			if ( function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
-				$encrypted_text = sodium_crypto_aead_aes256gcm_encrypt( $plain_text, '', $nonce, $this->get_hash() );
-			} elseif ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' ) ) {
-				$encrypted_text = sodium_crypto_aead_xchacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() );
-			} elseif ( function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_encrypt' ) ) {
-				$encrypted_text = sodium_crypto_aead_chacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() );
+			// nonce length depends on the algorithm, never hardcoded.
+			$nonce = random_bytes( self::NONCE_LENGTHS[ $algorithm ] );
+
+			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce );
+
+			if ( false === $encrypted_text ) {
+				throw new RuntimeException( 'Kein unterstützter Sodium-AEAD-Algorithmus auf diesem Server verfügbar.' );
 			}
 
+			// payload layout: [1 byte algo-id][nonce][ciphertext] - no separator
+			// character is used, so binary ':' bytes in the nonce/ciphertext can
+			// never corrupt the structure (unlike the previous explode(':', ...) approach).
+			$payload = chr( $algorithm ) . $nonce . $encrypted_text;
+
 			// return encrypted text as base64.
-			return sodium_bin2base64( $nonce . ':' . $encrypted_text, $this->get_coding_id() );
+			return sodium_bin2base64( $payload, $this->get_coding_id() );
 		} catch ( Exception $e ) {
 			// trigger the error.
-			throw new RuntimeException( 'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() ) );
+			throw new RuntimeException( 'Error during encrypting via sodium: ' . wp_kses_post( $e->getMessage() ) );
 		}
 	}
 
@@ -199,23 +327,29 @@ class Sodium extends Method_Base {
 		}
 
 		try {
-			// split into the parts after converting from base64- to binary-string.
-			$parts = explode( ':', sodium_base642bin( $encrypted_text, $this->get_coding_id() ) );
+			$payload = sodium_base642bin( $encrypted_text, $this->get_coding_id() );
 
-			// bail if an array is empty or does not have 2 entries.
-			if ( count( $parts ) !== 2 ) {
+			// need at least the algo byte + the smallest possible nonce.
+			if ( strlen( $payload ) < 2 ) {
 				return '';
 			}
 
-			// get the decrypted text.
-			$decrypted = '';
-			if ( function_exists( 'sodium_crypto_aead_aes256gcm_decrypt' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
-				$decrypted = sodium_crypto_aead_aes256gcm_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
-			} elseif ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt' ) ) {
-				$decrypted = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
-			} elseif ( function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt' ) ) {
-				$decrypted = sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $parts[1], '', $parts[0], $this->get_hash() );
+			$algorithm = ord( $payload[0] );
+
+			if ( ! isset( self::NONCE_LENGTHS[ $algorithm ] ) ) {
+				return '';
 			}
+
+			$nonce_length = self::NONCE_LENGTHS[ $algorithm ];
+
+			if ( strlen( $payload ) < 1 + $nonce_length ) {
+				return '';
+			}
+
+			$nonce      = substr( $payload, 1, $nonce_length );
+			$ciphertext = substr( $payload, 1 + $nonce_length );
+
+			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce );
 
 			// bail if the decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
