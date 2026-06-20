@@ -115,3 +115,11 @@ $crypt->uninstall();
 ## Analyse with PHPStan
 
 `vendor/bin/phpstan analyse`
+
+## Check for WordPress VIP Coding Standards
+
+Hint: this check runs against the VIP-GO-platform which is not our target for this plugin. Many warnings can be ignored.
+
+### Run
+
+`vendor/bin/phpcs --extensions=php --ignore=*/vendor/*,*/tests/* --standard=WordPress-VIP-Go .`

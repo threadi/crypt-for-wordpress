@@ -8,7 +8,6 @@
 namespace CryptForWordPress\Tests\Unit;
 
 use CryptForWordPress\Tests\CryptForWordPressTests;
-use WP_Filesystem_Direct;
 
 /**
  * Object to test the supported methods.
