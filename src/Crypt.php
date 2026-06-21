@@ -8,6 +8,8 @@
 namespace CryptForWordPress;
 
 // prevent direct access.
+use WP_Error;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -41,6 +43,13 @@ class Crypt {
 	 * @var array<string,array<string,mixed>|string>
 	 */
 	private array $configuration = array();
+
+	/**
+	 * List of errors.
+	 *
+	 * @var WP_Error|null
+	 */
+	protected ?WP_Error $errors = null;
 
 	/**
 	 * Constructor for this object.
@@ -478,5 +487,67 @@ class Crypt {
 			'place'         => $place_name,
 			'method'        => $method_name,
 		);
+	}
+
+	/**
+	 * Add an error the list.
+	 *
+	 * @param string              $code The error code.
+	 * @param string              $message The error message.
+	 * @param array<string,mixed> $data The error data.
+	 *
+	 * @return void
+	 */
+	public function add_error( string $code, string $message, array $data = array() ): void {
+		// create a new error object, if not already set.
+		if ( null === $this->errors ) {
+			$this->errors = new WP_Error();
+		}
+
+		// add the error to the list.
+		$this->errors->add(
+			$code,
+			$message,
+			$data
+		);
+
+		/**
+		 * Run tasks if an error is added to the list.
+		 *
+		 * @since 2.0.0 Available since 2.0.0.
+		 *
+		 * @param string $code The error code.
+		 * @param string $message The message.
+		 * @param array $data Data for the error.
+		 */
+		do_action( $this->get_slug() . '_error', $code, $message, $data );
+	}
+
+	/**
+	 * Return errors.
+	 *
+	 * @return WP_Error|null
+	 */
+	public function get_errors(): ?WP_Error {
+		return $this->errors;
+	}
+
+	/**
+	 * Return whether errors has been occurred.
+	 *
+	 * @return bool
+	 */
+	public function has_errors(): bool {
+		return $this->errors instanceof WP_Error
+			&& $this->errors->has_errors();
+	}
+
+	/**
+	 * Reset the list of errors.
+	 *
+	 * @return void
+	 */
+	public function clear_errors(): void {
+		$this->errors = null;
 	}
 }

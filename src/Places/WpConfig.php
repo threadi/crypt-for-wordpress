@@ -75,6 +75,13 @@ class WpConfig extends Place_Base {
 
 				// bail if the file has no contents.
 				if ( ! $wp_config_php_content ) {
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'wpconfig_php_no_content',
+						'The wp-config.php file is empty.'
+					);
+
+					// do nothing more.
 					return;
 				}
 
@@ -108,6 +115,13 @@ class WpConfig extends Place_Base {
 
 				// bail if resulting value is not a string.
 				if ( ! is_string( $wp_config_php_content ) ) {
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'wpconfig_php_not_string',
+						'The updated content for wp-config.php is not a string.'
+					);
+
+					// do nothing more.
 					return;
 				}
 
@@ -179,6 +193,13 @@ class WpConfig extends Place_Base {
 
 		// write the new content to the temp file first.
 		if ( ! $wp_filesystem->put_contents( $tmp_path, $content ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'wpconfig_php_could_not_write',
+				'The updated content for wp-config.php could not be written.'
+			);
+
+			// do nothing more.
 			return;
 		}
 
@@ -186,16 +207,24 @@ class WpConfig extends Place_Base {
 		if ( ! $wp_filesystem->move( $tmp_path, $path, true ) ) {
 			// clean up the temp file if the move failed.
 			$wp_filesystem->delete( $tmp_path );
+
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'wpconfig_php_could_not_move',
+				'The updated content for wp-config.php could not be moved to the target. Possible write permission error.'
+			);
+
+			// do nothing more.
 			return;
 		}
 
-        // get the configuration.
-        $config = $this->get_crypt_obj()->get_config();
+		// get the configuration.
+		$config = $this->get_crypt_obj()->get_config();
 
-        // set the file permissions, if set.
-        if ( ! empty( $config['file_permissions'] ) ) {
-            $wp_filesystem->chmod( $path, absint( $config['file_permissions'] ) );
-        }
+		// set the file permissions, if set.
+		if ( ! empty( $config['file_permissions'] ) ) {
+			$wp_filesystem->chmod( $path, absint( $config['file_permissions'] ) );
+		}
 
 		// invalidate a possible OPCache-entry for the file, so other workers do not keep serving the old version.
 		if ( function_exists( 'opcache_invalidate' ) ) {
@@ -243,6 +272,13 @@ class WpConfig extends Place_Base {
 
 		// bail if wp-config.php is not writable.
 		if ( ! Helper::is_writable( $wp_config_php_path ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'wpconfig_php_could_not_write',
+				'The wp-config.php is not writeable. Possible write permission error.'
+			);
+
+			// do nothing more.
 			return;
 		}
 
@@ -265,6 +301,13 @@ class WpConfig extends Place_Base {
 				$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $constant, '@' ) . '["\'].*$@miU', '', $wp_config_php_content );
 
 				if ( ! is_string( $wp_config_php_content ) ) {
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'wpconfig_php_not_string',
+						'The updated content for wp-config.php is not a string.'
+					);
+
+					// do nothing more.
 					return;
 				}
 

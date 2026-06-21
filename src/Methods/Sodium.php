@@ -84,6 +84,7 @@ class Sodium extends Method_Base {
 	 * @throws Exception Could throw exception.
 	 */
 	public function init(): void {
+		// get the hash.
 		if ( $this->is_hash_saved() ) {
 			$this->set_hash( sodium_base642bin( $this->get_hash_value_from_constant(), $this->get_coding_id() ) ); // @phpstan-ignore constant.notFound
 		}
@@ -273,6 +274,13 @@ class Sodium extends Method_Base {
 	public function encrypt( string $plain_text ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_slug_missing',
+				'Plugin slug not set',
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -288,10 +296,18 @@ class Sodium extends Method_Base {
 			// nonce length depends on the algorithm, never hardcoded.
 			$nonce = random_bytes( self::NONCE_LENGTHS[ $algorithm ] );
 
+			// get the algorithm to use.
 			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce );
 
 			if ( false === $encrypted_text ) {
-				throw new RuntimeException( 'Kein unterstützter Sodium-AEAD-Algorithmus auf diesem Server verfügbar.' );
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'sodium_slug_missing',
+					'No supported Sodium AEAD algorithm found on this hosting.',
+				);
+
+				// do nothing more.
+				return '';
 			}
 
 			// payload layout: [1 byte algo-id][nonce][ciphertext] - no separator
@@ -302,8 +318,14 @@ class Sodium extends Method_Base {
 			// return encrypted text as base64.
 			return sodium_bin2base64( $payload, $this->get_coding_id() );
 		} catch ( Exception $e ) {
-			// trigger the error.
-			throw new RuntimeException( 'Error during encrypting via sodium: ' . wp_kses_post( $e->getMessage() ) );
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_slug_missing',
+				'Error during encrypting via sodium: ' . wp_kses_post( $e->getMessage() ),
+			);
+
+			// do nothing more.
+			return '';
 		}
 	}
 
@@ -318,6 +340,13 @@ class Sodium extends Method_Base {
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_slug_missing',
+				'Plugin slug not set',
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -327,25 +356,55 @@ class Sodium extends Method_Base {
 		}
 
 		try {
+			// get the payload.
 			$payload = sodium_base642bin( $encrypted_text, $this->get_coding_id() );
 
 			// need at least the algo byte + the smallest possible nonce.
 			if ( strlen( $payload ) < 2 ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'sodium_payload_not_set',
+					'Sodium payload is not set in encrypted string.',
+				);
+
+				// do nothing more.
 				return '';
 			}
 
 			$algorithm = ord( $payload[0] );
 
 			if ( ! isset( self::NONCE_LENGTHS[ $algorithm ] ) ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'sodium_algorithm_unknown',
+					'Given algorithm is unknown. Could not decrypt string.',
+					array(
+						'algorithm' => $algorithm,
+					)
+				);
+
+				// do nothing more.
 				return '';
 			}
 
+			// get the length.
 			$nonce_length = self::NONCE_LENGTHS[ $algorithm ];
 
 			if ( strlen( $payload ) < 1 + $nonce_length ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'sodium_payload_mismatch',
+					'Payload nonce for encrypted string does not match.',
+					array(
+						'algorithm' => $algorithm,
+					)
+				);
+
+				// do nothing more.
 				return '';
 			}
 
+			// get the nonce.
 			$nonce      = substr( $payload, 1, $nonce_length );
 			$ciphertext = substr( $payload, 1 + $nonce_length );
 
@@ -353,14 +412,27 @@ class Sodium extends Method_Base {
 
 			// bail if the decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'sodium_decrypt_error',
+					'Decrypted string is not a string'
+				);
+
+				// do nothing more.
 				return '';
 			}
 
 			// return the resulting decrypted string.
 			return $decrypted;
 		} catch ( Exception $e ) {
-			// trigger the error.
-			throw new RuntimeException( 'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() ) );
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_decrypt_error',
+				'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() )
+			);
+
+			// do nothing more.
+			return '';
 		}
 	}
 

@@ -43,6 +43,13 @@ class MuPlugin extends Place_Base {
 	public function is_usable(): bool {
 		// bail if the "must use"-plugin-directory is not set.
 		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'muplugin_constant_missing',
+				'The constant WPMU_PLUGIN_DIR is missing.',
+			);
+
+			// do nothing more.
 			return false;
 		}
 
@@ -130,6 +137,13 @@ class MuPlugin extends Place_Base {
 	public function uninstall( string $constant ): void {
 		// bail if WPMU_PLUGIN_DIR is not set.
 		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'muplugin_constant_missing',
+				'The constant WPMU_PLUGIN_DIR is missing.',
+			);
+
+			// do nothing more.
 			return;
 		}
 
@@ -146,6 +160,16 @@ class MuPlugin extends Place_Base {
 
 		// bail if file does not exist.
 		if ( ! $wp_filesystem->exists( $file_path ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'muplugin_missing',
+				'The generated must use plugin file is missing',
+				array(
+					'file_path' => $file_path,
+				)
+			);
+
+			// do nothing more.
 			return;
 		}
 

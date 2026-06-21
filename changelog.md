@@ -8,7 +8,8 @@
 -> an environment variable from .env-file
 -> a server variable in the hosting
 - Added the function debug() to return the actual configuration for debugging purposes
-- Added some documentation
+- Added documentations for each place and method 
+- Added error handling
 
 ### Changed
 
