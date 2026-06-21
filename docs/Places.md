@@ -19,10 +19,10 @@ If you would like to keep the key separate from your database credentials, you c
 ## List of supported places
 
 * the **wp-config.php** file
-* a Must-Use plugin
-* a custom file
-* a server environment variable
-* an environment variable
+* [a Must-Use plugin](places/MuPlugin.md)
+* [a custom file](places/CustomFile.md)
+* [a server environment variable](places/ServerVariable.md)
+* [an environment variable](places/EnvironmentVariable.md)
 
 ## Custom Locations
 

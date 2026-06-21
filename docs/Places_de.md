@@ -19,10 +19,10 @@ Wenn du den Schlüssel getrennt von den Datenbankzugangsdaten aufbewahren möcht
 ## Liste mit unterstützten Speicherorte
 
 * die Datei `wp-config.php`
-* ein Must-Use-Plugin
-* eine individuelle Datei
-* eine Serverumgebungsvariable
-* eine Umgebungsvariable
+* [ein Must-Use-Plugin](places/MuPlugin_de.md)
+* [eine individuelle Datei](places/CustomFile_de.md)
+* [eine Serverumgebungsvariable](places/ServerVariable_de.md)
+* [eine Umgebungsvariable](places/EnvironmentVariable_de.md)
 
 ## Individuelle Speicherort
 

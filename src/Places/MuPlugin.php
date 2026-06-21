@@ -81,6 +81,14 @@ class MuPlugin extends Place_Base {
 
 		// save the file.
 		$wp_filesystem->put_contents( $file_path, $file_content );
+
+		// get the configuration.
+		$config = $this->get_crypt_obj()->get_config();
+
+		// set the file permissions, if set.
+		if ( ! empty( $config['file_permissions'] ) ) {
+			$wp_filesystem->chmod( $file_path, absint( $config['file_permissions'] ) );
+		}
 	}
 
 	/**

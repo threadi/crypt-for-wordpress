@@ -82,13 +82,13 @@ class CustomFile extends Place_Base {
 		$custom_file_php_content = '<?php';
 
 		// remove previous value.
-		$placeholder           = '## ' . strtoupper( $this->get_crypt_obj()->get_plugin_name() ) . ' placeholder ##';
-        $custom_file_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $this->get_constant(), '@' ) . '["\'].*$@miU', $placeholder, $custom_file_php_content );
-        $custom_file_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $custom_file_php_content );
+		$placeholder             = '## ' . strtoupper( $this->get_crypt_obj()->get_plugin_name() ) . ' placeholder ##';
+		$custom_file_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $this->get_constant(), '@' ) . '["\'].*$@miU', $placeholder, $custom_file_php_content );
+		$custom_file_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $custom_file_php_content );
 
 		// add the constant.
-		$define                = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
-        $custom_file_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $custom_file_php_content, 1 );
+		$define                  = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+		$custom_file_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $custom_file_php_content, 1 );
 
 		// bail if resulting value is not a string.
 		if ( ! is_string( $custom_file_php_content ) ) {
