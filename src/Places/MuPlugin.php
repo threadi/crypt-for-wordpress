@@ -87,18 +87,18 @@ class MuPlugin extends Place_Base {
 		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename();
 
 		// save the file.
-		if( ! $wp_filesystem->put_contents( $file_path, $file_content ) ) {
-            $this->get_crypt_obj()->add_error(
-                'muplugin_write_failed',
-                'Could not write the generated "must use"-plugin file',
-                array(
-                    'path' => $file_path,
-                )
-            );
+		if ( ! $wp_filesystem->put_contents( $file_path, $file_content ) ) {
+			$this->get_crypt_obj()->add_error(
+				'muplugin_write_failed',
+				'Could not write the generated "must use"-plugin file',
+				array(
+					'path' => $file_path,
+				)
+			);
 
-            // do nothing more.
-            return;
-        }
+			// do nothing more.
+			return;
+		}
 
 		// get the configuration.
 		$config = $this->get_crypt_obj()->get_config();

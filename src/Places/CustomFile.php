@@ -110,18 +110,18 @@ class CustomFile extends Place_Base {
 		$custom_file_php_content .= $define;
 
 		// save the changed wp-config.php.
-		if( ! $wp_filesystem->put_contents( $secured_path, $custom_file_php_content ) ) {
-            $this->get_crypt_obj()->add_error(
-                'custom_file_write_failed',
-                'Could not write the custom file.',
-                array(
-                    'path' => $secured_path,
-                )
-            );
+		if ( ! $wp_filesystem->put_contents( $secured_path, $custom_file_php_content ) ) {
+			$this->get_crypt_obj()->add_error(
+				'custom_file_write_failed',
+				'Could not write the custom file.',
+				array(
+					'path' => $secured_path,
+				)
+			);
 
-            // do nothing more.
-            return;
-        }
+			// do nothing more.
+			return;
+		}
 
 		// set the file permissions, if set.
 		if ( ! empty( $config['file_permissions'] ) ) {
@@ -165,22 +165,22 @@ class CustomFile extends Place_Base {
 			return;
 		}
 
-        // secure the given path.
-        $secured_path = wp_normalize_path( $config['custom_file_path'] );
-        if ( preg_match( '#^[a-z][a-z0-9+\-.]*:#i', $secured_path ) ) {
-            // log this error.
-            $this->get_crypt_obj()->add_error(
-                'custom_file_wrong_path',
-                'Wrong path for the custom file provided.',
-                array(
-                    'path'         => $config['custom_file_path'],
-                    'secured_path' => $secured_path,
-                )
-            );
+		// secure the given path.
+		$secured_path = wp_normalize_path( $config['custom_file_path'] );
+		if ( preg_match( '#^[a-z][a-z0-9+\-.]*:#i', $secured_path ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'custom_file_wrong_path',
+				'Wrong path for the custom file provided.',
+				array(
+					'path'         => $config['custom_file_path'],
+					'secured_path' => $secured_path,
+				)
+			);
 
-            // do nothing more.
-            return;
-        }
+			// do nothing more.
+			return;
+		}
 
 		// get the WP_Filesystem object.
 		$wp_filesystem = Helper::get_wp_filesystem();
