@@ -91,7 +91,7 @@ class WpConfig extends Place_Base {
 				$wp_config_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $wp_config_php_content );
 
 				// add the constant.
-				$define = "define( '" . $this->get_constant() . "', '" . $hash . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+				$define = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
 
 				// insert right before the (non-localized) ABSPATH-check that follows the
 				// translatable "stop editing" comment - this works regardless of the
