@@ -223,7 +223,7 @@ class WpConfig extends Place_Base {
 
 		// set the file permissions, if set.
 		if ( ! empty( $config['file_permissions'] ) ) {
-			$wp_filesystem->chmod( $path, absint( $config['file_permissions'] ) );
+			$wp_filesystem->chmod( $path, (int) $config['file_permissions'] );
 		}
 
 		// invalidate a possible OPCache-entry for the file, so other workers do not keep serving the old version.
