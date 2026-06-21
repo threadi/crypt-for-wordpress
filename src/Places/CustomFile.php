@@ -186,13 +186,13 @@ class CustomFile extends Place_Base {
 		$wp_filesystem = Helper::get_wp_filesystem();
 
 		// bail if the path for the file does not exist.
-		if ( ! $wp_filesystem->exists( $config['custom_file_path'] ) ) {
+		if ( ! $wp_filesystem->exists( $secured_path ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'custom_file_path_not_exists',
 				'Given path for the custom file does not exist.',
 				array(
-					'path' => $config['custom_file_path'],
+					'path' => $secured_path,
 				)
 			);
 
@@ -201,6 +201,6 @@ class CustomFile extends Place_Base {
 		}
 
 		// embed the given file.
-		require_once $config['custom_file_path'];
+		require_once $secured_path;
 	}
 }
