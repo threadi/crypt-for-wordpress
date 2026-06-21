@@ -68,12 +68,32 @@ class OpenSsl extends Method_Base {
 		if ( empty( $this->get_hash() ) ) {
 			// bail if the configured hash algorithm does not exist.
 			if ( ! in_array( $this->configuration['hash_algorithm'], hash_algos(), true ) ) {
-				throw new RuntimeException( 'Unknown hash algorithm: ' . wp_kses_post( $this->configuration['hash_algorithm'] ) );
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'openssl_hash_algo_unknown',
+					'Unknown hash algorithm.',
+					array(
+						'hash_algorithm' => $this->configuration['hash_algorithm'],
+					)
+				);
+
+				// do nothing more.
+				return;
 			}
 
 			// bail if the hash type is unknown.
 			if ( ! in_array( $this->configuration['hash_type'], array( 'hash', 'hash_pbkdf2' ), true ) ) {
-				throw new RuntimeException( 'Unknown hash type: ' . wp_kses_post( $this->configuration['hash_type'] ) );
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'openssl_hash_algo_unknown',
+					'Unknown hash type.',
+					array(
+						'hash_type' => $this->configuration['hash_type'],
+					)
+				);
+
+				// do nothing more.
+				return;
 			}
 
 			// prepare the hash.
@@ -84,7 +104,17 @@ class OpenSsl extends Method_Base {
 				try {
 					$hash = hash( $this->configuration['hash_algorithm'], random_bytes( 32 ) );
 				} catch ( Exception $e ) {
-					throw new RuntimeException( 'Secure random number source not available – Installation cannot be initialized securely: ' . wp_kses_post( $e->getMessage() ) );
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'openssl_hash_algo_error',
+						'Error during generating the hash algorithm:' . wp_kses_post( $e->getMessage() ),
+						array(
+							'hash_algorithm' => $this->configuration['hash_algorithm'],
+						)
+					);
+
+					// do nothing more.
+					return;
 				}
 			}
 
@@ -102,7 +132,17 @@ class OpenSsl extends Method_Base {
 						)
 					);
 				} catch ( Exception $e ) {
-					throw new RuntimeException( 'Secure random number source not available – Installation cannot be initialized securely: ' . wp_kses_post( $e->getMessage() ) );
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'openssl_hash_type_error',
+						'Secure random number source not available – Installation cannot be initialized securely:' . wp_kses_post( $e->getMessage() ),
+						array(
+							'hash_type' => $this->configuration['hash_type'],
+						)
+					);
+
+					// do nothing more.
+					return;
 				}
 			}
 
@@ -141,6 +181,13 @@ class OpenSsl extends Method_Base {
 	public function encrypt( string $plain_text ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_slug_missing',
+				'Plugin slug not set',
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -159,7 +206,17 @@ class OpenSsl extends Method_Base {
 
 		// bail if the configured cipher is not available.
 		if ( ! in_array( strtolower( $cipher ), openssl_get_cipher_methods(), true ) ) {
-			throw new RuntimeException( 'Unknown cipher algorithm: ' . wp_kses_post( $this->configuration['cipher_algorithm'] ) );
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_cipher_algo_unknown',
+				'Unknown cipher algorithm.',
+				array(
+					'cipher_algorithm' => $cipher,
+				)
+			);
+
+			// do nothing more.
+			return '';
 		}
 
 		// gets the cipher iv length.
@@ -167,6 +224,13 @@ class OpenSsl extends Method_Base {
 
 		// bail if iv length could not be loaded.
 		if ( ! is_int( $iv_length ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_iv_length_error',
+				'IV length could not be generated.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -175,6 +239,13 @@ class OpenSsl extends Method_Base {
 
 		// bail if iv could not be created.
 		if ( ! $iv || ! $crypto_strong ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_iv_error',
+				'IV could not be generated.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -198,6 +269,13 @@ class OpenSsl extends Method_Base {
 
 			// bail if text could not be encrypted.
 			if ( ! is_string( $ciphertext ) ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'openssl_encrypt_error',
+					'Given string could not be encrypted.'
+				);
+
+				// do nothing more.
 				return '';
 			}
 
@@ -225,6 +303,13 @@ class OpenSsl extends Method_Base {
 
 			// bail if anything failed.
 			if ( ! $ciphertext_raw ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'openssl_encrypt_error',
+					'Given string could not be encrypted.'
+				);
+
+				// do nothing more.
 				return '';
 			}
 
@@ -242,11 +327,18 @@ class OpenSsl extends Method_Base {
 	 * @param string $encrypted_text The encrypted string.
 	 *
 	 * @return string
-	 * @throws RuntimeException If cipher is unknown or the stored key is invalid.
+	 * @throws RuntimeException If cipher is unknown, or the stored key is invalid.
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_slug_missing',
+				'Plugin slug not set',
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -265,7 +357,17 @@ class OpenSsl extends Method_Base {
 
 		// bail if the configured cipher is not available.
 		if ( ! in_array( strtolower( $cipher ), openssl_get_cipher_methods(), true ) ) {
-			throw new RuntimeException( 'Unknown cipher algorithm: ' . wp_kses_post( $this->configuration['cipher_algorithm'] ) );
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_cipher_algo_unknown',
+				'Unknown cipher algorithm.',
+				array(
+					'cipher_algorithm' => $cipher,
+				)
+			);
+
+			// do nothing more.
+			return '';
 		}
 
 		// gets the cipher iv length.
@@ -273,6 +375,13 @@ class OpenSsl extends Method_Base {
 
 		// bail if iv length could not be loaded.
 		if ( ! $iv_length ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_iv_length_error',
+				'IV length could not be generated.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -316,6 +425,13 @@ class OpenSsl extends Method_Base {
 
 				// bail if IV could not be loaded.
 				if ( ! $iv ) {
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'openssl_iv_decrypt_error',
+						'IV could not be read.'
+					);
+
+					// do nothing more.
 					return '';
 				}
 
@@ -327,6 +443,13 @@ class OpenSsl extends Method_Base {
 
 				// bail if HMAC part could not be loaded.
 				if ( ! $c ) {
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'openssl_hmac_decrypt_error',
+						'HMAC could not be read.'
+					);
+
+					// do nothing more.
 					return '';
 				}
 
@@ -433,6 +556,13 @@ class OpenSsl extends Method_Base {
 
 		// bail if no text could be read.
 		if ( ! is_string( $plaintext ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decrypt_error',
+				'Given string could not be decrypted.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -446,6 +576,13 @@ class OpenSsl extends Method_Base {
 
 		// bail if hmac und calculated mac does not match.
 		if ( ! hash_equals( $hmac, $calc_mac ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decrypt_hmac_error',
+				'Check for hmac failed.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -470,7 +607,14 @@ class OpenSsl extends Method_Base {
 
 		// bail on any error.
 		if ( ! is_string( $decoded ) || '' === $decoded ) {
-			throw new RuntimeException( 'Stored encryption key is invalid or corrupted.' );
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decode_master_key_error',
+				'Stored encryption key is invalid or corrupted.'
+			);
+
+			// do nothing more.
+			return '';
 		}
 
 		// return the decoded hash.
@@ -489,9 +633,18 @@ class OpenSsl extends Method_Base {
 	 * @return string The decrypted plaintext, or '' on failure.
 	 */
 	private function try_decrypt_aead( string $cipher, string $ciphertext, string $iv, string $tag, string $key ): string {
+		// decrypt the string.
 		$plaintext = openssl_decrypt( $ciphertext, $cipher, $key, OPENSSL_RAW_DATA, $iv, $tag );
 
+		// bail if decryption failed.
 		if ( ! is_string( $plaintext ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decrypt_aead_error',
+				'Given string could not be decrypted.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 

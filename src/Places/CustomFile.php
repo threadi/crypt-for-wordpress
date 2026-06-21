@@ -75,28 +75,47 @@ class CustomFile extends Place_Base {
 		// get the configuration.
 		$config = $this->get_crypt_obj()->get_config();
 
+		// get the path.
+		$path = $config['custom_file_path'];
+
+		// bail if path is not a string.
+		if ( ! is_string( $path ) ) {
+			return;
+		}
+
+		// secure the given path.
+		$secured_path = wp_normalize_path( $path );
+		if ( preg_match( '/^[a-z]+:\/\//i', $secured_path ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'custom_file_wrong_path',
+				'Wrong path for the custom file provided.',
+				array(
+					'path'         => $path,
+					'secured_path' => $secured_path,
+				)
+			);
+
+			// do nothing more.
+			return;
+		}
+
 		// get WP Filesystem-handler.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
 		// prepare the content.
-		$custom_file_php_content = '<?php';
-
-		// remove previous value.
-		$placeholder             = '## ' . strtoupper( $this->get_crypt_obj()->get_plugin_name() ) . ' placeholder ##';
-		$custom_file_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $this->get_constant(), '@' ) . '["\'].*$@miU', $placeholder, $custom_file_php_content );
-		$custom_file_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $custom_file_php_content );
-
+		$custom_file_php_content = "<?php\n";
 		// add the constant.
-		$define                  = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
-		$custom_file_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $custom_file_php_content, 1 );
-
-		// bail if resulting value is not a string.
-		if ( ! is_string( $custom_file_php_content ) ) {
-			return;
-		}
+		$define                   = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+		$custom_file_php_content .= $define;
 
 		// save the changed wp-config.php.
-		$wp_filesystem->put_contents( $config['custom_file_path'], $custom_file_php_content ); // @phpstan-ignore argument.type
+		$wp_filesystem->put_contents( $secured_path, $custom_file_php_content ); // @phpstan-ignore argument.type
+
+		// set the file permissions, if set.
+		if ( ! empty( $config['file_permissions'] ) ) {
+			$wp_filesystem->chmod( $secured_path, absint( $config['file_permissions'] ) );
+		}
 	}
 
 	/**
@@ -110,19 +129,46 @@ class CustomFile extends Place_Base {
 
 		// bail if no file path is given.
 		if ( empty( $config['custom_file_path'] ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'custom_file_path_not_given',
+				'No path for the custom file provided.'
+			);
+
+			// do nothing more.
 			return;
 		}
 
 		// bail if given value is not a string.
 		if ( ! is_string( $config['custom_file_path'] ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'custom_file_path_is_not_a_string',
+				'Given path for the custom file is not a string.',
+				array(
+					'path' => $config['custom_file_path'],
+				)
+			);
+
+			// do nothing more.
 			return;
 		}
 
 		// get the WP_Filesystem object.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
-		// bail if the file does not exist.
+		// bail if the path for the file does not exist.
 		if ( ! $wp_filesystem->exists( $config['custom_file_path'] ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'custom_file_path_not_exists',
+				'Given path for the custom file does not exist.',
+				array(
+					'path' => $config['custom_file_path'],
+				)
+			);
+
+			// do nothing more.
 			return;
 		}
 

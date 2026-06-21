@@ -90,6 +90,20 @@ To decrypt an encrypted string use:
 $decrypted = $crypt->decrypt( 'My encrypted string to decrypt.' );
 ```
 
+### Errors
+
+Check and get errors:
+
+```
+if( $crypt->has_errors() ) {
+ var_dump( $crypt->get_errors() );
+} 
+```
+
+This is an WP_Error object, which will contain any error happened during the request.
+
+See also: [Error Handling](docs/ErrorHandling.md)
+
 ## Uninstall
 
 Use these code to remove the settings during uninstallation of your theme or plugin: 

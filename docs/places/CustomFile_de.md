@@ -8,7 +8,9 @@ Niemals einen Pfad für die Datei aus Datenbankoptionen, Benutzereingaben oder R
 
 ## Hinweise
 
-Der Pfad zur Datei muss innerhalb deines Hostings liegen, kann in diesem aber auch außerhalb des von der Website genutzten Verzeichnisses liegen. Die Datei muss beschreibbar sein.
+Der Pfad zur Datei muss innerhalb deines Hostings liegen, kann in diesem aber auch außerhalb des von der Website genutzten Verzeichnisses liegen. Der Pfad für die Datei muss beschreibbar sein.
+
+Die Datei unter dem angegebenen Pfad wird durch _Crypt for WordPress_ erzeugt. Du musst sie nicht selbst anlegen.
 
 Beim Löschen des Plugins wird die hier angegebene Datei _nicht_ gelöscht. Sie muss ggfs. nachträglich manuell entfernt werden.
 
@@ -20,3 +22,7 @@ Setze ggfs. die Dateiberechtigungen bewusst, so dass nur WordPress über den ver
 - "force_place" => "customfile"
 - "custom_file_path" => der absolute Pfad zu deiner individuellen Datei innerhalb deines Hostings
 2. Speichere die Angaben. Sie wirken sofort.
+
+## Optionen
+
+* "file_permissions" => setze eine gewünschte Dateiberechtigung für die Datei, z.B. 0600 damit sie nur vom aktuellen Server-Nutzer les- und schreibbar ist
