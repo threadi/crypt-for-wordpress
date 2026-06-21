@@ -8,8 +8,6 @@
 namespace CryptForWordPress;
 
 // prevent direct access.
-use CryptForWordPress\Places\CustomFile;
-
 defined( 'ABSPATH' ) || exit;
 
 /**

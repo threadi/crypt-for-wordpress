@@ -1,6 +1,6 @@
 # Verwendung von ServerVariable
 
-Dieses Dokument beschreibt die Verwendung einer Server-Umgebungsvariable als Aufbewahrungsort für den Schlüssel zum Ver- und Entschlüsseln von Texten mit diesem composer package.
+Dieses Dokument beschreibt die Verwendung einer Server-Umgebungsvariable als Aufbewahrungsort für den Schlüssel zum Ver- und Entschlüsseln von Texten mit _Crypt for WordPress_.
 
 ## Hinweise
 
@@ -17,7 +17,7 @@ Oder die Verwendung von https://github.com/vlucas/phpdotenv um mit .env-Dateien 
 ## Verwendung
 
 1. Richte serverseitig eine Variable mit dem von dir gewünschten Schlüssel ein. 
-2. Setze in der Konfiguration zum Laden von Crypt über `set_config()` die folgenden Angaben:
+2. Setze in der Konfiguration zum Laden von _Crypt for WordPress_ über `set_config()` die folgenden Angaben:
 - "force_place" => "server_variable"
 - "server_variable" => der von dir für die Umgebungsvariable verwendete Key
 3. Speichere die Angaben. Sie wirken sofort.

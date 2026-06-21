@@ -295,16 +295,11 @@ class OpenSsl extends Method_Base {
 			// try with the current (raw-byte) key first.
 			$original_plaintext = $this->try_decrypt_aead( $cipher, $ciphertext, $iv, $tag, $hash );
 
-			// fall back to the original legacy key (raw, undecoded hash string – pre Punkt-1-fix).
+			// fall back to the original legacy key (raw, undecoded hash string).
 			if ( '' === $original_plaintext ) {
 				$original_plaintext = $this->try_decrypt_aead( $cipher, $ciphertext, $iv, $tag, $this->get_hash() );
 			}
-
-			// bail if both attempts failed.
-			if ( '' === $original_plaintext ) {
-				return '';
-			}
-		} else {
+        } else {
 			// for all other ciphers.
 
 			// get two keys from the main key.
@@ -362,14 +357,14 @@ class OpenSsl extends Method_Base {
 				$legacy_key         = $this->get_hash();
 				$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $legacy_key, $legacy_key );
 			}
+        }
 
-			// bail if all attempts failed.
-			if ( '' === $original_plaintext ) {
-				return '';
-			}
-		}
+        // bail if both attempts failed.
+        if ( '' === $original_plaintext ) {
+            return '';
+        }
 
-		// return the resulting decrypted string.
+        // return the resulting decrypted string.
 		return $original_plaintext;
 	}
 

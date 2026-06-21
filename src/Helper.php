@@ -38,9 +38,9 @@ class Helper {
 	public static function get_wp_filesystem( bool $local = false ): WP_Filesystem_Base {
 		// get WP Filesystem-handler for local files if requested.
 		if ( $local ) {
+            // embed the local directory object.
 			require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
-
 			return new WP_Filesystem_Direct( false );
 		}
 
@@ -51,6 +51,7 @@ class Helper {
 
 		// bail if "wp_filesystem" is not of "WP_Filesystem_Base".
 		if ( ! $wp_filesystem instanceof WP_Filesystem_Base ) {
+            // embed the local directory object.
 			require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
 			return new WP_Filesystem_Direct( false );
@@ -61,7 +62,6 @@ class Helper {
 			// embed the local directory object.
 			require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
-
 			return new WP_Filesystem_Direct( false );
 		}
 

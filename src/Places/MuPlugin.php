@@ -69,7 +69,7 @@ class MuPlugin extends Place_Base {
 		$wp_filesystem = Helper::get_wp_filesystem();
 
 		// create a custom must-use-plugin instead.
-		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . $hash . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
 
 		// create mu-plugin directory if it is missing.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {

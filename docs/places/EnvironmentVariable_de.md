@@ -1,6 +1,6 @@
 # Verwendung von EnvironmentVariable
 
-Dieses Dokument beschreibt die Verwendung einer Umgebungsvariable als Aufbewahrungsort für den Schlüssel zum Ver- und Entschlüsseln von Texten mit diesem composer package.
+Dieses Dokument beschreibt die Verwendung einer Umgebungsvariable als Aufbewahrungsort für den Schlüssel zum Ver- und Entschlüsseln von Texten mit _Crypt for WordPress_.
 
 ## Hinweise
 
@@ -14,7 +14,7 @@ Die Verwendung von https://github.com/vlucas/phpdotenv um mit .env-Dateien in Wo
 
 ## Verwendung
 
-1. Setze in der Konfiguration zum Laden von Crypt über `set_config()` die folgenden Angaben:
+1. Setze in der Konfiguration zum Laden von _Crypt for WordPress_ über `set_config()` die folgenden Angaben:
 - "force_place" => "environment_variable"
 - "environment_variable" => der von dir für die Umgebungsvariable verwendete Key
 2. Speichere die Angaben. Sie wirken sofort.

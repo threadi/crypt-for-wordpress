@@ -87,7 +87,7 @@ class CustomFile extends Place_Base {
 		$wp_config_php_content = preg_replace( "@\n$placeholder@", '', (string) $wp_config_php_content );
 
 		// add the constant.
-		$define                = "define( '" . $this->get_constant() . "', '" . $hash . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+		$define                = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
 		$wp_config_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $wp_config_php_content, 1 );
 
 		// bail if resulting value is not a string.
