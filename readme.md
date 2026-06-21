@@ -48,6 +48,7 @@ Format:
 ```
 array(
     'force_method' => 'openssl', // openssl or sodium.
+    'force_place' => 'wpconfig', // supported places.
     'openssl' => array(
         'hash_type' => 'hash_pbkdf2', // hash_pbkdf2 or hash.
         'hash_algorithm' => 'sha256' // see hints below.

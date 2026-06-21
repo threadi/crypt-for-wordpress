@@ -83,8 +83,8 @@ class CustomFile extends Place_Base {
 
 		// remove previous value.
 		$placeholder           = '## ' . strtoupper( $this->get_crypt_obj()->get_plugin_name() ) . ' placeholder ##';
-		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $this->get_constant() . '["\'].*$@miU', $placeholder, $wp_config_php_content );
-		$wp_config_php_content = preg_replace( "@\n$placeholder@", '', (string) $wp_config_php_content );
+		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $this->get_constant(), '@' ) . '["\'].*$@miU', $placeholder, $wp_config_php_content );
+		$wp_config_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $wp_config_php_content );
 
 		// add the constant.
 		$define                = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
