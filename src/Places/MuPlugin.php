@@ -104,8 +104,12 @@ class MuPlugin extends Place_Base {
 		$config = $this->get_crypt_obj()->get_config();
 
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) ) {
-			$wp_filesystem->chmod( $file_path, (int) $config['file_permissions'] );
+		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $file_path, (int) $config['file_permissions'] ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'muplugin_could_set_permissions',
+				'Could not set file permissions. Possible write permission error.'
+			);
 		}
 	}
 

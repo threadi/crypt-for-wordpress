@@ -124,8 +124,12 @@ class CustomFile extends Place_Base {
 		}
 
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) ) {
-			$wp_filesystem->chmod( $secured_path, (int) $config['file_permissions'] );
+		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $secured_path, (int) $config['file_permissions'] ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'custom_file_could_set_permissions',
+				'Could not set file permissions. Possible write permission error.'
+			);
 		}
 	}
 
