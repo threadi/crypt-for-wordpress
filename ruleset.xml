@@ -21,7 +21,16 @@
     <rule ref="WordPress">
         <!-- Excluded in favour to match PSR-4-namings of classes. -->
         <exclude name="WordPress.Files.FileName"/>
+
         <!-- Exclude base64-warnings for backwards-compatibility with older plugin-version, but it also disabled serialize-warning .. -->
         <exclude name="WordPress.PHP.DiscouragedPHPFunctions"/>
+    </rule>
+
+    <!-- Exclude fopen and fclose in WpConfig class -->
+    <rule ref="WordPress.WP.AlternativeFunctions.file_system_operations_fopen">
+        <exclude-pattern>*/src/Places/WpConfig.php</exclude-pattern>
+    </rule>
+    <rule ref="WordPress.WP.AlternativeFunctions.file_system_operations_fclose">
+        <exclude-pattern>*/src/Places/WpConfig.php</exclude-pattern>
     </rule>
 </ruleset>

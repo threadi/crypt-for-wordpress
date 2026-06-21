@@ -79,24 +79,24 @@ class CustomFile extends Place_Base {
 		$wp_filesystem = Helper::get_wp_filesystem();
 
 		// prepare the content.
-		$wp_config_php_content = '<?php';
+		$custom_file_php_content = '<?php';
 
 		// remove previous value.
 		$placeholder           = '## ' . strtoupper( $this->get_crypt_obj()->get_plugin_name() ) . ' placeholder ##';
-		$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . $this->get_constant() . '["\'].*$@miU', $placeholder, $wp_config_php_content );
-		$wp_config_php_content = preg_replace( "@\n$placeholder@", '', (string) $wp_config_php_content );
+        $custom_file_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $this->get_constant(), '@' ) . '["\'].*$@miU', $placeholder, $custom_file_php_content );
+        $custom_file_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $custom_file_php_content );
 
 		// add the constant.
 		$define                = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
-		$wp_config_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $wp_config_php_content, 1 );
+        $custom_file_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $custom_file_php_content, 1 );
 
 		// bail if resulting value is not a string.
-		if ( ! is_string( $wp_config_php_content ) ) {
+		if ( ! is_string( $custom_file_php_content ) ) {
 			return;
 		}
 
 		// save the changed wp-config.php.
-		$wp_filesystem->put_contents( $config['custom_file_path'], $wp_config_php_content ); // @phpstan-ignore argument.type
+		$wp_filesystem->put_contents( $config['custom_file_path'], $custom_file_php_content ); // @phpstan-ignore argument.type
 	}
 
 	/**

@@ -299,7 +299,7 @@ class OpenSsl extends Method_Base {
 			if ( '' === $original_plaintext ) {
 				$original_plaintext = $this->try_decrypt_aead( $cipher, $ciphertext, $iv, $tag, $this->get_hash() );
 			}
-        } else {
+		} else {
 			// for all other ciphers.
 
 			// get two keys from the main key.
@@ -357,14 +357,14 @@ class OpenSsl extends Method_Base {
 				$legacy_key         = $this->get_hash();
 				$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $legacy_key, $legacy_key );
 			}
-        }
+		}
 
-        // bail if both attempts failed.
-        if ( '' === $original_plaintext ) {
-            return '';
-        }
+		// bail if both attempts failed.
+		if ( '' === $original_plaintext ) {
+			return '';
+		}
 
-        // return the resulting decrypted string.
+		// return the resulting decrypted string.
 		return $original_plaintext;
 	}
 
