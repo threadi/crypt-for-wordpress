@@ -12,6 +12,8 @@ Der Pfad zur Datei muss innerhalb deines Hostings liegen, kann in diesem aber au
 
 Beim Löschen des Plugins wird die hier angegebene Datei _nicht_ gelöscht. Sie muss ggfs. nachträglich manuell entfernt werden.
 
+Setze ggfs. die Dateiberechtigungen bewusst, so dass nur WordPress über den verwendeten Server-Nutzer diese lesen kann. Diese Konfiguration ist individuell je Hosting und wird von _Crypt for WordPress_ nicht weitergehend unterstützt.
+
 ## Verwendung
 
 1. Setze in der Konfiguration zum Laden von _Crypt for WordPress_ über `set_config()` die folgenden Angaben:
