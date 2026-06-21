@@ -189,6 +189,14 @@ class WpConfig extends Place_Base {
 			return;
 		}
 
+        // get the configuration.
+        $config = $this->get_crypt_obj()->get_config();
+
+        // set the file permissions, if set.
+        if ( ! empty( $config['file_permissions'] ) ) {
+            $wp_filesystem->chmod( $path, absint( $config['file_permissions'] ) );
+        }
+
 		// invalidate a possible OPCache-entry for the file, so other workers do not keep serving the old version.
 		if ( function_exists( 'opcache_invalidate' ) ) {
 			opcache_invalidate( $path, true );

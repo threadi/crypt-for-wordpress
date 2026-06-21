@@ -14,6 +14,4 @@ Die Datei des "Must Use"-Plugins wird durch _Crypt for WordPress_ automatisch er
 
 ## Optionen
 
-Weitere Optionen sind:
-
 * "file_permissions" => setze eine gewünschte Dateiberechtigung für die erzeugte Datei, z.B. 0600 damit sie nur vom aktuellen Server-Nutzer les- und schreibbar ist
