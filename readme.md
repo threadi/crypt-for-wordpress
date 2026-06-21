@@ -4,7 +4,7 @@ This repository contains the source code for the Composer package “Crypt for W
 
 ## How it works
 
-A hash key is generated for each plugin or theme, that is used for all encryption and decryption. This key is stored in the **wp-config.php** file or, if using a MU plugin, within the WordPress installation itself. As a result, it is not stored in the database where the encrypted data resides, keeping the key and the data separate. This makes it more difficult for attackers to decrypt the data, as they would need both to be successful.
+A hash key is generated for each plugin or theme, that is used for all encryption and decryption. This key is stored one of the supported places (like the file **wp-config.php**). As a result, it is not stored in the database where the encrypted data resides, keeping the key and the data separate. This makes it more difficult for attackers to decrypt the data, as they would need both to be successful.
 
 The **wp-config.php** file is primarily used for this purpose. If this file is not writable (that is the case with some hosting providers), a Must-Use plugin is generated and stored. Optionally, you can force the usage of a Must-Use plugin for each plugin or theme (see Settings below).
 
