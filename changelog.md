@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.1] - 26.06.2026
+
+### Fixed
+
+- Fixed a potential error if the OpenSSL hash is empty
+
 ## [2.0.0] - 26.06.2026
 
 ### Added
