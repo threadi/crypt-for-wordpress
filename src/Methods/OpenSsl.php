@@ -529,6 +529,11 @@ class OpenSsl extends Method_Base {
 	 * @return string
 	 */
 	private function derive_key( string $purpose, int $length, string $hash ): string {
+		// bail if hash is empty.
+		if( empty( $hash ) ) {
+			return '';
+		}
+
 		// return the hash for the given purpose.
 		return hash_hkdf(
 			$this->configuration['hash_algorithm'],
