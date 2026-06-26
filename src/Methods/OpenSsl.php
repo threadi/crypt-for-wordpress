@@ -530,7 +530,7 @@ class OpenSsl extends Method_Base {
 	 */
 	private function derive_key( string $purpose, int $length, string $hash ): string {
 		// bail if hash is empty.
-		if( empty( $hash ) ) {
+		if ( empty( $hash ) ) {
 			return '';
 		}
 
