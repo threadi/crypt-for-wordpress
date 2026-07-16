@@ -374,7 +374,7 @@ class OpenSsl extends Method_Base {
 		$iv_length = openssl_cipher_iv_length( $cipher );
 
 		// bail if iv length could not be loaded.
-		if ( ! $iv_length ) {
+		if ( ! is_int( $iv_length ) ) { // @phpstan-ignore function.alreadyNarrowedType
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'openssl_iv_length_error',
