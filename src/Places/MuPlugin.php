@@ -130,16 +130,16 @@ class MuPlugin extends Place_Base {
 	private function get_php_header(): string {
 		return '
 /**
- * Plugin Name:       Encryption for ' . sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) . '
- * Description:       Holds the hash value to use encryption within ' . sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) . '.
+ * Plugin Name:       Encryption for ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) ) . '
+ * Description:       Holds the hash value to use encryption within ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) ) . '.
  * Requires at least: 4.9.24
  * Requires PHP:      8.1
  * Version:           1.0.0
- * Author:            ' . sanitize_text_field( $this->get_crypt_obj()->get_plugin_author() ) . '
- * Author URI:        ' . sanitize_url( $this->get_crypt_obj()->get_plugin_author_url() ) . '
- * Text Domain:       ' . sanitize_text_field( $this->get_crypt_obj()->get_slug() ) . '-hash
+ * Author:            ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_plugin_author() ) ) . '
+ * Author URI:        ' . Helper::sanitize_for_php_comment( sanitize_url( $this->get_crypt_obj()->get_plugin_author_url() ) ) . '
+ * Text Domain:       ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_slug() ) ) . '-hash
  *
- * @package ' . sanitize_text_field( $this->get_crypt_obj()->get_slug() ) . '-hash
+ * @package ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_slug() ) ) . '-hash
  */';
 	}
 

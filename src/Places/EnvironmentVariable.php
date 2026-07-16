@@ -97,7 +97,7 @@ class EnvironmentVariable extends Place_Base {
 			return;
 		}
 
-		// bail if given environment variable does not exist.
+		// bail if the given environment variable does not exist.
 		if ( empty( $_ENV[ $config['environment_variable'] ] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(

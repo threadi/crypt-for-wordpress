@@ -68,4 +68,27 @@ class Helper {
 		// return the requested filesystem object.
 		return $wp_filesystem;
 	}
+
+	/**
+	 * Make an arbitrary string safe to embed into generated PHP source code
+	 * (e.g. inside a "// ..." line comment or a "/** ... *​/" doc comment).
+	 *
+	 * @param string $value The value to embed (e.g. plugin name, author, slug).
+	 *
+	 * @return string The sanitized, single-line-safe value.
+	 */
+	public static function sanitize_for_php_comment( string $value ): string {
+		// remove all control characters, including CR/LF, so the value
+		// can never end the line the generated comment is written on.
+		$value = preg_replace( '/[\x00-\x1F\x7F]/', '', $value );
+
+		// bail if the regex failed for some reason.
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		// break up any "*/" sequence so a "/** ... */" doc comment cannot be
+		// closed prematurely by attacker-/plugin-author-controlled content.
+		return str_replace( '*/', '* /', $value );
+	}
 }

@@ -7,10 +7,14 @@
 - Added database as last fallback if neither wp-config.php nor mu-plugin are writable
 - Added error if no usable place could be found
 
+### Changed
+
+- Optimized the generation of the "must-use"-plugin header
+
 ### Fixed
 
 - Fixed check if the "must-use"-plugin-directory is writable
-- Fixed a potential exception in Sodium method if a falsy key is given
+- Fixed a potential exception in the Sodium method if a falsy key is given
 
 ## [2.0.1] - 26.06.2026
 

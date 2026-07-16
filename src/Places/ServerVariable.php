@@ -97,7 +97,7 @@ class ServerVariable extends Place_Base {
 			return;
 		}
 
-		// bail if given server variable does not exist.
+		// bail if the given server variable does not exist.
 		if ( empty( $_SERVER[ $config['server_variable'] ] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(

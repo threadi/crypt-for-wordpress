@@ -12,7 +12,6 @@ defined( 'ABSPATH' ) || exit;
 
 use CryptForWordPress\Crypt;
 use CryptForWordPress\Helper;
-use CryptForWordPress\Method_Base;
 use CryptForWordPress\Place_Base;
 use WP_Filesystem_Base;
 
@@ -92,11 +91,11 @@ class WpConfig extends Place_Base {
 				$wp_config_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $wp_config_php_content );
 
 				// add the constant.
-				$define = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+				$define = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
 
 				// insert right before the (non-localized) ABSPATH-check that follows the
 				// translatable "stop editing" comment - this works regardless of the
-				// installations language, since the comment text itself is translated
+				// installation language, since the comment text itself is translated
 				// but this code block never is.
 				$abspath_pattern = '@^[\t ]*if\s*\(\s*!\s*defined\s*\(\s*["\']ABSPATH["\']\s*\)\s*\)\s*\{@miU';
 
