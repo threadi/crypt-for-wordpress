@@ -10,6 +10,7 @@
 ### Changed
 
 - Optimized the generation of the "must-use"-plugin header
+- Configuration option to block the usage of the database for the key
 
 ### Fixed
 

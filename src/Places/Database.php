@@ -6,8 +6,9 @@
  * Using this method, key and encrypted strings are in the same place.
  * This is strictly not recommended.
  *
- * Configuration to force this method (which is also not recommended):
- * - 'force_place' => 'database',
+ * Configuration::
+ * - 'force_place' => 'database', // no recommended.
+ * - 'block_database' => true, // to forcibly block the usage of the database for the key.
  *
  * @package crypt-for-wordpress
  */
@@ -47,7 +48,11 @@ class Database extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return true;
+		// get the configuration.
+		$config = $this->get_crypt_obj()->get_config();
+
+		// return true if the database is not blocked.
+		return ! ( isset( $config['block_database'] ) && $config['block_database'] );
 	}
 
 	/**
