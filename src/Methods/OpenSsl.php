@@ -249,7 +249,7 @@ class OpenSsl extends Method_Base {
 			return '';
 		}
 
-		// get the hash depending on used hash type.
+		// get the hash depending on the used hash type.
 		$hash = $this->get_decoded_master_key();
 
 		// handle GCM-based ciphers.
@@ -327,7 +327,7 @@ class OpenSsl extends Method_Base {
 	 * @param string $encrypted_text The encrypted string.
 	 *
 	 * @return string
-	 * @throws RuntimeException If cipher is unknown, or the stored key is invalid.
+	 * @throws RuntimeException If the cipher is unknown, or the stored key is invalid.
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		// bail if slug is not set.
@@ -388,7 +388,7 @@ class OpenSsl extends Method_Base {
 		// decode the encrypted text.
 		$c = base64_decode( $encrypted_text );
 
-		// get the hash depending on used hash type.
+		// get the hash depending on the used hash type.
 		$hash = $this->get_decoded_master_key();
 
 		// handle GCM-based ciphers.
@@ -518,7 +518,7 @@ class OpenSsl extends Method_Base {
 	}
 
 	/**
-	 * Derive a purpose-specific sub-key from the master secret via HKDF.
+	 * Derive a purpose-specific subkey from the master secret via HKDF.
 	 *
 	 * @param string $purpose The context label (e.g. 'encryption', 'authentication').
 	 * @param int    $length Desired key length in bytes.
@@ -576,7 +576,7 @@ class OpenSsl extends Method_Base {
 			return '';
 		}
 
-		// get the calculated mac.
+		// get the calculated HMAC.
 		$calc_mac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
 
 		// bail if hmac und calculated mac does not match.
@@ -603,7 +603,7 @@ class OpenSsl extends Method_Base {
 	 * @throws RuntimeException If the stored key cannot be decoded.
 	 */
 	private function get_decoded_master_key(): string {
-		// get hash depending on used type.
+		// get hash depending on the used type.
 		if ( 'hash_pbkdf2' === $this->configuration['hash_type'] ) {
 			$decoded = base64_decode( $this->get_hash(), true );
 		} else {

@@ -45,7 +45,7 @@ class Sodium extends Method_Base {
 
 	/**
 	 * Algorithm-tier identifiers used as a single-byte prefix in the
-	 * encrypted payload, so decrypt() always knows, which algorithm and
+	 * encrypted payload, so decrypt() always knows which algorithm and
 	 * nonce length were used - independent of what the *current* server
 	 * happens to support. This is what makes values portable across
 	 * server migrations / libsodium upgrades.
@@ -140,7 +140,7 @@ class Sodium extends Method_Base {
 	 *
 	 * @return string
 	 */
-	protected function get_constant(): string {
+	public function get_constant(): string {
 		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-SODIUM-HASH';
 
 		/**
@@ -199,7 +199,7 @@ class Sodium extends Method_Base {
 	 * @param string $nonce The nonce to use (already correctly sized).
 	 *
 	 * @return string|false The ciphertext, or false if the algorithm is unavailable.
-	 * @throws SodiumException Could throw sodium exception.
+	 * @throws SodiumException Could throw a sodium exception.
 	 */
 	private function encrypt_with( int $algorithm, string $plain_text, string $nonce ): false|string {
 		switch ( $algorithm ) {

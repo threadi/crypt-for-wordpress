@@ -56,13 +56,13 @@ class MuPlugin extends Place_Base {
 		// get the filesystem handler.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
-		// bail if the "must use"-plugin-parent-directory is not writeable, and the "must-use"-plugin-directory does not exist.
+		// bail if the "must-use"-plugin-parent-directory is not writeable, and the "must-use"-plugin-directory does not exist.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) && ! Helper::is_writable( dirname( WPMU_PLUGIN_DIR ) ) ) {
 			return false;
 		}
 
 		// return the result of the check if the "must-use"-plugin-parent-directory is writable.
-		return Helper::is_writable( dirname( WPMU_PLUGIN_DIR ) );
+		return Helper::is_writable( WPMU_PLUGIN_DIR );
 	}
 
 	/**
@@ -78,7 +78,7 @@ class MuPlugin extends Place_Base {
 		// create a custom must-use-plugin instead.
 		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
 
-		// create mu-plugin directory if it is missing.
+		// create the "must-use"-directory if it is missing.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {
 			$wp_filesystem->mkdir( WPMU_PLUGIN_DIR );
 		}

@@ -74,11 +74,18 @@ class Crypt {
 		// get the place object.
 		$place_obj = $this->get_place();
 		if ( ! $place_obj instanceof Place_Base ) {
+			// log this error.
+			$this->add_error(
+				'save_place_not_available',
+				'Could not find any place to save the key for encryption.'
+			);
+
+			// do nothing more.
 			return false;
 		}
 		$place_obj->load();
 
-		// loop through the objects to check, which one we could use.
+		// loop through the objects to check which one we could use.
 		foreach ( $this->get_methods_as_objects() as $obj ) {
 			// bail if the method is unusable.
 			if ( ! $obj->is_usable() ) {
@@ -113,6 +120,13 @@ class Crypt {
 
 		// bail if the method could not be found.
 		if ( false === $method_obj ) {
+			// log this error.
+			$this->add_error(
+				'no_method_available',
+				'Could not find any supported method to encrypt strings.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -133,6 +147,13 @@ class Crypt {
 
 		// bail if the method could not be found.
 		if ( false === $method_obj ) {
+			// log this error.
+			$this->add_error(
+				'no_method_available',
+				'Could not find any supported method to encrypt strings.'
+			);
+
+			// do nothing more.
 			return '';
 		}
 
@@ -322,7 +343,7 @@ class Crypt {
 			return array();
 		}
 
-		// bail if configuration is not an array.
+		// bail if the configuration is not an array.
 		if ( ! is_array( $this->configuration[ $method_name ] ) ) {
 			return array();
 		}
@@ -341,7 +362,7 @@ class Crypt {
 	}
 
 	/**
-	 * Set custom configuration for this object.
+	 * Set the custom configuration for this object.
 	 *
 	 * @param array<string,array<string,mixed>|string> $configurations List of configurations.
 	 * @return void
@@ -359,6 +380,7 @@ class Crypt {
 		$places = array(
 			'CryptForWordPress\Places\WpConfig',
 			'CryptForWordPress\Places\MuPlugin',
+			'CryptForWordPress\Places\Database',
 			'CryptForWordPress\Places\CustomFile',
 			'CryptForWordPress\Places\EnvironmentVariable',
 			'CryptForWordPress\Places\ServerVariable',
@@ -416,14 +438,14 @@ class Crypt {
 	}
 
 	/**
-	 * Return the place where the token should be saved.
+	 * Return the place, where the token should be saved.
 	 *
 	 * @access private
 	 *
 	 * @return false|Place_Base
 	 */
 	public function get_place(): false|Place_Base {
-		// loop through the objects to check, which one we could use.
+		// loop through the objects to check which one we could use.
 		foreach ( $this->get_places_as_object() as $obj ) {
 			// bail if the method is unusable.
 			if ( ! $obj->is_usable() ) {
@@ -451,6 +473,13 @@ class Crypt {
 
 		// bail if no place could be loaded.
 		if ( ! $place_obj instanceof Place_Base ) {
+			// log this error.
+			$this->add_error(
+				'save_place_not_available',
+				'Could not find any place to save the key for encryption.'
+			);
+
+			// do nothing more.
 			return;
 		}
 
@@ -490,7 +519,7 @@ class Crypt {
 	}
 
 	/**
-	 * Add an error the list.
+	 * Add an error to the list.
 	 *
 	 * @param string              $code The error code.
 	 * @param string              $message The error message.
@@ -533,7 +562,7 @@ class Crypt {
 	}
 
 	/**
-	 * Return whether errors has been occurred.
+	 * Return whether errors have been occurred.
 	 *
 	 * @return bool
 	 */

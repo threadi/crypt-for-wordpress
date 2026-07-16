@@ -59,7 +59,7 @@ class Method_Base {
 	}
 
 	/**
-	 * Return name of the method.
+	 * Return the name of the method.
 	 *
 	 * @return string
 	 */
@@ -175,7 +175,7 @@ class Method_Base {
 		 * Filter the name of the constant.
 		 *
 		 * @since 1.1.2 Available since 1.1.2.
-		 * @param string $constant The constants name.
+		 * @param string $constant The name of the constant.
 		 */
 		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
 	}

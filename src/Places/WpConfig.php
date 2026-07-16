@@ -12,6 +12,7 @@ defined( 'ABSPATH' ) || exit;
 
 use CryptForWordPress\Crypt;
 use CryptForWordPress\Helper;
+use CryptForWordPress\Method_Base;
 use CryptForWordPress\Place_Base;
 use WP_Filesystem_Base;
 
@@ -113,7 +114,7 @@ class WpConfig extends Place_Base {
 					$wp_config_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $wp_config_php_content, 1 );
 				}
 
-				// bail if resulting value is not a string.
+				// bail if the resulting value is not a string.
 				if ( ! is_string( $wp_config_php_content ) ) {
 					// log this error.
 					$this->get_crypt_obj()->add_error(
@@ -138,7 +139,7 @@ class WpConfig extends Place_Base {
 	 * Uses a dedicated lock-file next to the target (not the target itself, so we never
 	 * interfere with the atomic rename in atomic_put_contents()) and a native flock(),
 	 * since the "WP_Filesystem" abstraction (e.g., for FTP) does not support locking.
-	 * The lock file itself always lives on local disk (ABSPATH is always local, even if
+	 * The lock file itself always lives on the local disk (ABSPATH is always local, even if
 	 * WP_Filesystem uses FTP/SSH2 for the actual transfer), so flock() works reliably here.
 	 *
 	 * @param string   $target_path The file the callback will modify.
@@ -179,7 +180,7 @@ class WpConfig extends Place_Base {
 	 *
 	 * Writes to a temporary file first and then moves (renames) it onto the target path.
 	 * A rename on the same filesystem is atomic, so any concurrent reader either sees the
-	 * complete old content, or the complete new content - never a truncated/partial file.
+	 * complete old content or the complete new content - never a truncated/partial file.
 	 *
 	 * @param WP_Filesystem_Base $wp_filesystem The WP_Filesystem-handler to use.
 	 * @param string             $path The target path to write to.

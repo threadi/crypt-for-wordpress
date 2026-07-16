@@ -1,6 +1,6 @@
 <?php
 /**
- * File to handle a custom file as place to save the key.
+ * File to handle a custom file as the place to save the key.
  *
  * Configuration:
  * - 'force_place' => 'customfile',
@@ -22,7 +22,7 @@ use CryptForWordPress\Helper;
 use CryptForWordPress\Place_Base;
 
 /**
- * Object to handle a custom file as place to save the key.
+ * Object to handle a custom file as the place to save the key.
  */
 class CustomFile extends Place_Base {
 
