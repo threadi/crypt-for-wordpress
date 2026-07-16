@@ -1,6 +1,10 @@
 <?php
 /**
- * File to handle a mu-plugin as place to save the key.
+ * File to handle a mu-plugin as the place to save the key.
+ *
+ *  Configuration:
+ *  - 'force_place' => 'muplugin', // optional.
+ *  - 'file_permissions' => '0640', // optional.
  *
  * @package crypt-for-wordpress
  */
@@ -15,7 +19,7 @@ use CryptForWordPress\Helper;
 use CryptForWordPress\Place_Base;
 
 /**
- * Object to handle a mu-plugin as place to save the key.
+ * Object to handle a mu-plugin as the place to save the key.
  */
 class MuPlugin extends Place_Base {
 
@@ -25,6 +29,15 @@ class MuPlugin extends Place_Base {
 	 * @var string
 	 */
 	protected string $name = 'muplugin';
+
+	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $configuration = array(
+		'file_permissions' => '0640',
+	);
 
 	/**
 	 * Constructor for this object.
@@ -41,7 +54,7 @@ class MuPlugin extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		// bail if the "must use"-plugin-directory is not set.
+		// bail if the "must-use"-plugin-directory is not set.
 		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
@@ -100,11 +113,8 @@ class MuPlugin extends Place_Base {
 			return;
 		}
 
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $file_path, (int) $config['file_permissions'] ) ) {
+		if ( ! $wp_filesystem->chmod( $file_path, Helper::get_permission( $this->configuration['file_permissions'] ) ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'muplugin_could_set_permissions',
@@ -173,7 +183,7 @@ class MuPlugin extends Place_Base {
 		// define the path.
 		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename();
 
-		// bail if file does not exist.
+		// bail if the file does not exist.
 		if ( ! $wp_filesystem->exists( $file_path ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(

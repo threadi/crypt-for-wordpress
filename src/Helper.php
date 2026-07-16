@@ -91,4 +91,42 @@ class Helper {
 		// closed prematurely by attacker-/plugin-author-controlled content.
 		return str_replace( '*/', '* /', $value );
 	}
+
+	/**
+	 * Check a given file permission and return the correct octal value.
+	 *
+	 * @param mixed $file_permission The given file permission.
+	 *
+	 * @return int
+	 */
+	public static function get_permission( mixed $file_permission ): int {
+		$allowed = array(
+			'0600',
+			'0640',
+			'0644',
+			'0660',
+			'0664',
+		);
+
+		// check if the given value is a string and if it is a valid octal value.
+		if ( is_string( $file_permission ) ) {
+			$file_permission = sanitize_text_field( $file_permission );
+
+			if ( in_array( $file_permission, $allowed, true ) ) {
+				return (int) octdec( $file_permission );
+			}
+		}
+
+		// check if the given value is an integer and if it is a valid octal value.
+		if ( is_int( $file_permission ) ) {
+			foreach ( $allowed as $permission ) {
+				if ( octdec( $permission ) === $file_permission ) {
+					return (int) $file_permission;
+				}
+			}
+		}
+
+		// return the default value.
+		return (int) octdec( '0640' );
+	}
 }

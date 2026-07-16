@@ -271,7 +271,9 @@ class Crypt {
 	 * Set the plugin file.
 	 *
 	 * @param string $plugin_file The absolute path to the plugin file.
+	 *
 	 * @return void
+	 * @noinspection PhpUnused
 	 */
 	public function set_plugin_file( string $plugin_file ): void {
 		$this->plugin_file = $plugin_file;
@@ -452,6 +454,9 @@ class Crypt {
 				continue;
 			}
 
+			// set the configuration.
+			$obj->set_config( $this->get_config() );
+
 			// return this place object.
 			return $obj;
 		}
@@ -575,6 +580,7 @@ class Crypt {
 	 * Reset the list of errors.
 	 *
 	 * @return void
+	 * @noinspection PhpUnused
 	 */
 	public function clear_errors(): void {
 		$this->errors = null;

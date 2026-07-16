@@ -29,6 +29,13 @@ class Place_Base {
 	private string $constant = '';
 
 	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $configuration = array();
+
+	/**
 	 * The crypt object.
 	 *
 	 * @var Crypt
@@ -103,4 +110,14 @@ class Place_Base {
 	 * @return void
 	 */
 	public function load(): void {}
+
+	/**
+	 * Set the configuration.
+	 *
+	 * @param array<string,mixed> $configuration The configuration to use.
+	 * @return void
+	 */
+	public function set_config( array $configuration ): void {
+		$this->configuration = array_merge( $this->configuration, $configuration );
+	}
 }

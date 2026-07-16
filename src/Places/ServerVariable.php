@@ -47,21 +47,18 @@ class ServerVariable extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// bail if no name for the server variable is given.
-		if ( empty( $config['server_variable'] ) ) {
+		if ( empty( $this->configuration['server_variable'] ) ) {
 			return false;
 		}
 
 		// bail if given value is not a string.
-		if ( ! is_string( $config['server_variable'] ) ) {
+		if ( ! is_string( $this->configuration['server_variable'] ) ) {
 			return false;
 		}
 
 		// return true if the server variable is set and filled.
-		return ! empty( $_SERVER[ $config['server_variable'] ] );
+		return ! empty( $_SERVER[ $this->configuration['server_variable'] ] );
 	}
 
 	/**
@@ -70,11 +67,9 @@ class ServerVariable extends Place_Base {
 	 * @return void
 	 */
 	public function load(): void {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
 
 		// bail if no name for the server variable is given.
-		if ( empty( $config['server_variable'] ) ) {
+		if ( empty( $this->configuration['server_variable'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'server_variable_missing',
@@ -86,7 +81,7 @@ class ServerVariable extends Place_Base {
 		}
 
 		// bail if given value is not a string.
-		if ( ! is_string( $config['server_variable'] ) ) {
+		if ( ! is_string( $this->configuration['server_variable'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'server_variable_not_a_string',
@@ -98,13 +93,13 @@ class ServerVariable extends Place_Base {
 		}
 
 		// bail if the given server variable does not exist.
-		if ( empty( $_SERVER[ $config['server_variable'] ] ) ) {
+		if ( empty( $_SERVER[ $this->configuration['server_variable'] ] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'server_variable_missing_in_server',
 				'The variable is missing in server variable. Did you miss the configuration in your hosting?',
 				array(
-					'server_variable' => $config['server_variable'],
+					'server_variable' => $this->configuration['server_variable'],
 				)
 			);
 
@@ -113,6 +108,6 @@ class ServerVariable extends Place_Base {
 		}
 
 		// set the variable as constant.
-		define( $config['server_variable'], sanitize_text_field( wp_unslash( $_SERVER[ $config['server_variable'] ] ) ) );
+		define( $this->configuration['server_variable'], sanitize_text_field( wp_unslash( $_SERVER[ $this->configuration['server_variable'] ] ) ) );
 	}
 }

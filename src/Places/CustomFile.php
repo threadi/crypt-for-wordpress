@@ -3,11 +3,12 @@
  * File to handle a custom file as the place to save the key.
  *
  * Configuration:
- * - 'force_place' => 'customfile',
- * - 'custom_file_path' => '/your/absolute/path/to/creds.php',
+ * - 'force_place' => 'customfile', // optional.
+ * - 'custom_file_path' => '/your/absolute/path/to/creds.php', // required if forced.
+ * - 'file_permissions' => '0640', // optional.
  *
  * Hint:
- * - This file will be embedded by this package on load.
+ * - This file will be embedded by this package onload.
  *
  * @package crypt-for-wordpress
  */
@@ -34,6 +35,15 @@ class CustomFile extends Place_Base {
 	protected string $name = 'customfile';
 
 	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $configuration = array(
+		'file_permissions' => '0640',
+	);
+
+	/**
 	 * Constructor for this object.
 	 *
 	 * @param Crypt $crypt_obj The crypt object.
@@ -48,21 +58,18 @@ class CustomFile extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// bail if no file path is given.
-		if ( empty( $config['custom_file_path'] ) ) {
+		if ( empty( $this->configuration['custom_file_path'] ) ) {
 			return false;
 		}
 
 		// bail if given value is not a string.
-		if ( ! is_string( $config['custom_file_path'] ) ) {
+		if ( ! is_string( $this->configuration['custom_file_path'] ) ) {
 			return false;
 		}
 
 		// check if it is writable.
-		return Helper::is_writable( dirname( $config['custom_file_path'] ) ); // @phpstan-ignore argument.type
+		return Helper::is_writable( dirname( $this->configuration['custom_file_path'] ) ); // @phpstan-ignore argument.type
 	}
 
 	/**
@@ -72,13 +79,10 @@ class CustomFile extends Place_Base {
 	 * @return void
 	 */
 	public function save( string $hash ): void {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// get the path.
-		$path = $config['custom_file_path'];
+		$path = $this->configuration['custom_file_path'];
 
-		// bail if path is not a string.
+		// bail if the path is not a string.
 		if ( ! is_string( $path ) ) {
 			return;
 		}
@@ -124,7 +128,7 @@ class CustomFile extends Place_Base {
 		}
 
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $secured_path, (int) $config['file_permissions'] ) ) {
+		if ( ! $wp_filesystem->chmod( $secured_path, Helper::get_permission( $this->configuration['file_permissions'] ) ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'custom_file_could_set_permissions',
@@ -139,11 +143,8 @@ class CustomFile extends Place_Base {
 	 * @return void
 	 */
 	public function load(): void {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// bail if no file path is given.
-		if ( empty( $config['custom_file_path'] ) ) {
+		if ( empty( $this->configuration['custom_file_path'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'custom_file_path_not_given',
@@ -155,13 +156,13 @@ class CustomFile extends Place_Base {
 		}
 
 		// bail if given value is not a string.
-		if ( ! is_string( $config['custom_file_path'] ) ) {
+		if ( ! is_string( $this->configuration['custom_file_path'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'custom_file_path_is_not_a_string',
 				'Given path for the custom file is not a string.',
 				array(
-					'path' => $config['custom_file_path'],
+					'path' => $this->configuration['custom_file_path'],
 				)
 			);
 
@@ -170,14 +171,14 @@ class CustomFile extends Place_Base {
 		}
 
 		// secure the given path.
-		$secured_path = wp_normalize_path( $config['custom_file_path'] );
+		$secured_path = wp_normalize_path( $this->configuration['custom_file_path'] );
 		if ( preg_match( '#^[a-z][a-z0-9+\-.]*:#i', $secured_path ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'custom_file_wrong_path',
 				'Wrong path for the custom file provided.',
 				array(
-					'path'         => $config['custom_file_path'],
+					'path'         => $this->configuration['custom_file_path'],
 					'secured_path' => $secured_path,
 				)
 			);

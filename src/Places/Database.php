@@ -48,11 +48,7 @@ class Database extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
-		// return true if the database is not blocked.
-		return ! ( isset( $config['block_database'] ) && $config['block_database'] );
+		return ! ( isset( $this->configuration['block_database'] ) && $this->configuration['block_database'] );
 	}
 
 	/**

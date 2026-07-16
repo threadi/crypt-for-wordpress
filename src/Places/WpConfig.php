@@ -218,11 +218,8 @@ class WpConfig extends Place_Base {
 			return;
 		}
 
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $path, (int) $config['file_permissions'] ) ) {
+		if ( ! empty( $this->configuration['file_permissions'] ) && ! $wp_filesystem->chmod( $path, (int) $this->configuration['file_permissions'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'wpconfig_php_could_set_permissions',
