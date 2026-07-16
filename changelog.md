@@ -10,6 +10,7 @@
 ### Fixed
 
 - Fixed check if the "must-use"-plugin-directory is writable
+- Fixed a potential exception in Sodium method if a falsy key is given
 
 ## [2.0.1] - 26.06.2026
 

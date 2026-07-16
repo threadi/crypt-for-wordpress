@@ -84,55 +84,64 @@ class Sodium extends Method_Base {
 	 * @throws Exception Could throw exception.
 	 */
 	public function init(): void {
-		// get the hash.
-		if ( $this->is_hash_saved() ) {
-			$this->set_hash( sodium_base642bin( $this->get_hash_value_from_constant(), $this->get_coding_id() ) ); // @phpstan-ignore constant.notFound
-		}
-
-		// bail if hash is set.
-		if ( ! empty( $this->get_hash() ) ) {
-			return;
-		}
-
-		// get hash from the old db entry.
-		$this->set_hash( sodium_base642bin( get_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', '' ), $this->get_coding_id() ) );
-
-		// if no hash is set, create one.
-		if ( empty( $this->get_hash() ) ) {
-			// get the hash depending on the setting.
-			switch ( $this->configuration['hash_type'] ) {
-				case 'sodium_crypto_secretbox_keygen':
-					$hash = sodium_crypto_secretbox_keygen();
-					break;
-				case 'sodium_crypto_auth_keygen':
-					$hash = sodium_crypto_auth_keygen();
-					break;
-				case 'sodium_crypto_generichash_keygen':
-					$hash = sodium_crypto_generichash_keygen();
-					break;
-				case 'sodium_crypto_kdf_keygen':
-					$hash = sodium_crypto_kdf_keygen();
-					break;
-				case 'random_bytes':
-					$hash = random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
-					break;
-				default:
-					$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
-					break;
+		try {
+			// get the hash.
+			if ( $this->is_hash_saved() ) {
+				$this->set_hash( sodium_base642bin( $this->get_hash_value_from_constant(), $this->get_coding_id() ) ); // @phpstan-ignore constant.notFound
 			}
 
-			// set the hash.
-			$this->set_hash( $hash );
+			// bail if hash is set.
+			if ( ! empty( $this->get_hash() ) ) {
+				return;
+			}
+
+			// get hash from the old db entry.
+			$this->set_hash( sodium_base642bin( get_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', '' ), $this->get_coding_id() ) );
+
+			// if no hash is set, create one.
+			if ( empty( $this->get_hash() ) ) {
+				// get the hash depending on the setting.
+				switch ( $this->configuration['hash_type'] ) {
+					case 'sodium_crypto_secretbox_keygen':
+						$hash = sodium_crypto_secretbox_keygen();
+						break;
+					case 'sodium_crypto_auth_keygen':
+						$hash = sodium_crypto_auth_keygen();
+						break;
+					case 'sodium_crypto_generichash_keygen':
+						$hash = sodium_crypto_generichash_keygen();
+						break;
+					case 'sodium_crypto_kdf_keygen':
+						$hash = sodium_crypto_kdf_keygen();
+						break;
+					case 'random_bytes':
+						$hash = random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
+						break;
+					default:
+						$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
+						break;
+				}
+
+				// set the hash.
+				$this->set_hash( $hash );
+			}
+
+			// save the hash in its place.
+			$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
+
+			// delete the old option field.
+			delete_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash' );
+
+			// run the constant for this process.
+			$this->run_constant();
+
+		} catch ( Exception $e ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_decrypt_error',
+				'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() )
+			);
 		}
-
-		// save the hash in its place.
-		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
-
-		// delete the old option field.
-		delete_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash' );
-
-		// run the constant for this process.
-		$this->run_constant();
 	}
 
 	/**
