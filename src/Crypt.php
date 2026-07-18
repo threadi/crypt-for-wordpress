@@ -85,7 +85,7 @@ class Crypt {
 		}
 		$place_obj->load();
 
-		// loop through the objects to check which one we could use.
+		// loop through the objects to check, which one we could use.
 		foreach ( $this->get_methods_as_objects() as $obj ) {
 			// bail if the method is unusable.
 			if ( ! $obj->is_usable() ) {
@@ -387,6 +387,7 @@ class Crypt {
 			'CryptForWordPress\Places\CustomFile',
 			'CryptForWordPress\Places\EnvironmentVariable',
 			'CryptForWordPress\Places\ServerVariable',
+			'CryptForWordPress\Places\WordPressSalts',
 		);
 
 		/**
@@ -448,7 +449,7 @@ class Crypt {
 	 * @return false|Place_Base
 	 */
 	public function get_place(): false|Place_Base {
-		// loop through the objects to check which one we could use.
+		// loop through the objects to check, which one we could use.
 		foreach ( $this->get_places_as_object() as $obj ) {
 			// bail if the method is unusable.
 			if ( ! $obj->is_usable() ) {

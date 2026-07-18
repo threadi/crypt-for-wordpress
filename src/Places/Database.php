@@ -2,12 +2,12 @@
 /**
  * File to handle the database as the place to save the key.
  *
- * ===== Warning =====,
+ * ===== Warning =====
  * Using this method, key and encrypted strings are in the same place.
  * This is strictly not recommended.
  *
  * Configuration::
- * - 'force_place' => 'database', // no recommended.
+ * - 'force_place' => 'database', // not recommended.
  * - 'block_database' => true, // to forcibly block the usage of the database for the key.
  *
  * @package crypt-for-wordpress
