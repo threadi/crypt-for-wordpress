@@ -25,7 +25,7 @@ jobs:
         run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP
 
       - name: Run WordPress Coding Standard fixes
-        run: vendor/bin/phpcbf --standard=ruleset.xml .
+        run: vendor/bin/phpcbf .
 
       - name: Generate autoloader
         run: composer install --no-dev --optimize-autoloader

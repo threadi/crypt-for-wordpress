@@ -137,11 +137,11 @@ We support following places:
 
 ### Run
 
-`vendor/bin/phpcs --standard=ruleset.xml vendor/threadi/easy-directory-listing-for-wordpress/`
+`vendor/bin/phpcs .`
 
 ### Repair
 
-`vendor/bin/phpcbf --standard=ruleset.xml vendor/threadi/easy-directory-listing-for-wordpress/`
+`vendor/bin/phpcbf .`
 
 ## Analyse with PHPStan
 
