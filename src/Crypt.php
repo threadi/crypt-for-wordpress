@@ -8,9 +8,9 @@
 namespace CryptForWordPress;
 
 // prevent direct access.
-use WP_Error;
-
 defined( 'ABSPATH' ) || exit;
+
+use WP_Error;
 
 /**
  * Object to handle crypt tasks.
@@ -274,7 +274,8 @@ class Crypt {
 	 *
 	 * @return void
 	 * @noinspection PhpUnused
-	 */
+     * @noinspection PhpUnused
+     */
 	public function set_plugin_file( string $plugin_file ): void {
 		$this->plugin_file = $plugin_file;
 	}
@@ -581,7 +582,8 @@ class Crypt {
 	 *
 	 * @return void
 	 * @noinspection PhpUnused
-	 */
+     * @noinspection PhpUnused
+     */
 	public function clear_errors(): void {
 		$this->errors = null;
 	}
