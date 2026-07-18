@@ -98,6 +98,20 @@ class Sodium extends Method_Base {
 			// get hash from the old db entry.
 			$this->set_hash( sodium_base642bin( get_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', '' ), $this->get_coding_id() ) );
 
+			// let the place derive the key, if it can.
+			if ( empty( $this->get_hash() ) ) {
+				$raw_key = $this->get_derived_key();
+
+				if ( '' !== $raw_key ) {
+					// this method works on raw key bytes, so no encoding is needed.
+					$this->set_hash( $raw_key );
+
+					// a derived key is recreated on every request: it must not be
+					// written into a place, and there is no old option to clean up.
+					return;
+				}
+			}
+
 			// if no hash is set, create one.
 			if ( empty( $this->get_hash() ) ) {
 				// get the hash depending on the setting.
@@ -247,33 +261,33 @@ class Sodium extends Method_Base {
 		switch ( $algorithm ) {
 			case self::ALGO_AEGIS256:
 				if ( ! function_exists( 'sodium_crypto_aead_aegis256_decrypt' ) ) {
-					throw new RuntimeException( 'AEGIS-256 wird von diesem Server nicht unterstützt (libsodium-Upgrade nötig), kann diesen Wert aber nicht entschlüsseln.' );
+					throw new RuntimeException( 'AEGIS-256 is not supported by this server (requires a libsodium upgrade), but it cannot decrypt this value.' );
 				}
 				return sodium_crypto_aead_aegis256_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
 			case self::ALGO_AES256GCM:
 				if ( ! function_exists( 'sodium_crypto_aead_aes256gcm_decrypt' ) ) {
-					throw new RuntimeException( 'AES-256-GCM wird von diesem Server nicht unterstützt, kann diesen Wert aber nicht entschlüsseln.' );
+					throw new RuntimeException( 'AES-256-GCM is not supported by this server, but it cannot decrypt this value.' );
 				}
 				return sodium_crypto_aead_aes256gcm_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
 			case self::ALGO_XCHACHA20POLY1305:
 				if ( ! function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt' ) ) {
-					throw new RuntimeException( 'XChaCha20-Poly1305 wird von diesem Server nicht unterstützt, kann diesen Wert aber nicht entschlüsseln.' );
+					throw new RuntimeException( 'XChaCha20-Poly1305 is not supported by this server, but it cannot decrypt this value.' );
 				}
 				return sodium_crypto_aead_xchacha20poly1305_ietf_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
 			case self::ALGO_CHACHA20POLY1305:
 				if ( ! function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt' ) ) {
-					throw new RuntimeException( 'ChaCha20-Poly1305 wird von diesem Server nicht unterstützt, kann diesen Wert aber nicht entschlüsseln.' );
+					throw new RuntimeException( 'ChaCha20-Poly1305 is not supported by this server, but it cannot decrypt this value.' );
 				}
 				return sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
 			default:
-				throw new RuntimeException( 'Unbekanntes Algorithmus-Tier im verschlüsselten Wert.' );
+				throw new RuntimeException( 'Unknown algorithm type in the encrypted value.' );
 		}
 	}
 
 	/**
 	 * Encrypt a given string.
 	 *
-	 * @access private
+	 * @internal Used for internal tasks.
 	 *
 	 * @param string $plain_text The plain string.
 	 *
@@ -311,7 +325,7 @@ class Sodium extends Method_Base {
 			if ( false === $encrypted_text ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
-					'sodium_slug_missing',
+					'sodium_no_algorithm',
 					'No supported Sodium AEAD algorithm found on this hosting.',
 				);
 
@@ -329,7 +343,7 @@ class Sodium extends Method_Base {
 		} catch ( Exception $e ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
-				'sodium_slug_missing',
+				'sodium_encrypt_error',
 				'Error during encrypting via sodium: ' . wp_kses_post( $e->getMessage() ),
 			);
 
@@ -461,6 +475,15 @@ class Sodium extends Method_Base {
 	 * @throws SodiumException On Exception through Sodium.
 	 */
 	public function uninstall(): void {
+		// bail if hash is not saved.
+		if ( ! $this->is_hash_saved() ) {
+			// run parent uninstalling tasks.
+			parent::uninstall();
+
+			// do nothing more.
+			return;
+		}
+
 		// initiate the method to get the actual hash.
 		$this->init();
 

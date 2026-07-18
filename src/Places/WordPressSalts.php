@@ -68,46 +68,35 @@ class WordPressSalts extends Place_Base {
 	}
 
 	/**
+	 * Return raw key material derived from the configured WordPress salt.
+	 *
+	 * @return string
+	 */
+	public function get_derived_key(): string {
+		// get the raw value of the configured salt constant.
+		$salt_value = ( is_string( $this->configuration['salt'] ) && defined( $this->configuration['salt'] ) )
+			? constant( $this->configuration['salt'] )
+			: '';
+
+		// bail if the configured salt does not exist or is empty.
+		if ( empty( $salt_value ) ) {
+			return '';
+		}
+
+		// return raw key material - the method takes care of the encoding.
+		return hash_hkdf( 'sha256', $salt_value, 32, $this->get_crypt_obj()->get_slug() . '-wordpress-salts' );
+	}
+
+	/**
 	 * Load this places environments before the crypt method is used.
 	 *
 	 * @return void
 	 */
 	public function load(): void {
-        // get the raw value of the configured salt constant.
-        $salt_value = ( is_string( $this->configuration['salt'] ) && defined( $this->configuration['salt'] ) )
-            ? constant( $this->configuration['salt'] )
-            : '';
-
-        // set the constant.
-        if ( ! empty( $salt_value ) && ! defined( $this->get_constant_name() ) ) {
-            // Derive a key and hex-encode it, matching the format
-            // OpenSsl::get_decoded_master_key() expects (hex2bin()). The raw
-            // salt is plain ASCII, not hex, and would break hex2bin() as-is.
-            $derived_key = hash_hkdf( 'sha256', $salt_value, 32, $this->get_crypt_obj()->get_slug() . '-wordpress-salts' );
-            define( $this->get_constant_name(), bin2hex( $derived_key ) );
-        }
-
-        // log a warning.
-        $this->get_crypt_obj()->add_error(
-            'insecure_place_wordpress_salts',
-            'Using salts is insecure and must be addressed.'
-        );
-	}
-
-	/**
-	 * Return the name of the constant.
-	 *
-	 * @return string
-	 */
-	private function get_constant_name(): string {
-		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
-
-		/**
-		 * Filter the name of the constant.
-		 *
-		 * @since 1.1.2 Available since 1.1.2.
-		 * @param string $constant The constant name.
-		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		// log a warning.
+		$this->get_crypt_obj()->add_error(
+			'insecure_place_wordpress_salts',
+			'Using salts is insecure and must be addressed.'
+		);
 	}
 }

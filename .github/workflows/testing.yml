@@ -7,12 +7,28 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  test:
     name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: composer install
+
+      - name: PHPStan check
+        run: vendor/bin/phpstan analyse
+
+      - name: PHP Compatibility check
+        run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP --runtime-set testVersion 8.1-
+
+  build:
+    name: Run PHP Unit tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: ['8.5', '8.4', '8.3', '8.2']
+        php-version: [ '8.5', '8.4', '8.3', '8.2', '8.1' ]
     services:
       database:
         image: mysql:latest
@@ -27,15 +43,6 @@ jobs:
 
       - name: Install dependencies
         run: composer install
-
-      - name: PHPStan check
-        run: vendor/bin/phpstan analyse
-
-      - name: PHP Compatibility check
-        run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP
-
-      - name: Run WordPress Coding Standard fixes
-        run: vendor/bin/phpcbf .
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2

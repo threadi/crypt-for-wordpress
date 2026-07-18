@@ -112,6 +112,21 @@ class Place_Base {
 	public function load(): void {}
 
 	/**
+	 * Return raw key material this place can derive on its own.
+	 *
+	 * Places, which only store a key that this package generated return an
+	 * empty string here - they hand their key over as a constant via load()
+	 * instead. Only places, which compute a key themselves (e.g., from the
+	 * WordPress salts) implement this, and they return raw bytes: the
+	 * encoding is the business of the method that will use it.
+	 *
+	 * @return string
+	 */
+	public function get_derived_key(): string {
+		return '';
+	}
+
+	/**
 	 * Set the configuration.
 	 *
 	 * @param array<string,mixed> $configuration The configuration to use.

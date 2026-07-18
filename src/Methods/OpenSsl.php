@@ -64,6 +64,20 @@ class OpenSsl extends Method_Base {
 		// get hash from the database.
 		$this->set_hash( get_option( $this->get_crypt_obj()->get_slug() . '_hash', '' ) );
 
+		// let the place derive the key, if it can.
+		if ( empty( $this->get_hash() ) ) {
+			$raw_key = $this->get_derived_key();
+
+			if ( '' !== $raw_key ) {
+				// encode it the way this method reads its key back.
+				$this->set_hash( $this->encode_key( $raw_key ) );
+
+				// a derived key is recreated on every request: it must not be
+				// written into a place, and there is no old option to clean up.
+				return;
+			}
+		}
+
 		// if no hash is set, create one.
 		if ( empty( $this->get_hash() ) ) {
 			// bail if the configured hash algorithm does not exist.
@@ -172,7 +186,7 @@ class OpenSsl extends Method_Base {
 	/**
 	 * Encrypt a given string.
 	 *
-	 * @access private
+	 * @internal Used for internal tasks.
 	 *
 	 * @param string $plain_text Text to encrypt.
 	 *
@@ -197,7 +211,7 @@ class OpenSsl extends Method_Base {
 		}
 
 		// bail if no text is given.
-		if ( empty( $plain_text ) ) {
+		if ( '' === $plain_text ) {
 			return '';
 		}
 
@@ -285,40 +299,38 @@ class OpenSsl extends Method_Base {
 				base64_encode( $tag ) . ':' . // @phpstan-ignore argument.type
 				base64_encode( $ciphertext )
 			);
-		} else {
-			// for all others ciphers.
+		}
 
-			// get two keys from the main key.
-			$enc_key  = $this->derive_key( 'encryption', 32, $hash );
-			$hmac_key = $this->derive_key( 'authentication', 32, $hash );
+		// get two keys from the main key.
+		$enc_key  = $this->derive_key( 'encryption', 32, $hash );
+		$hmac_key = $this->derive_key( 'authentication', 32, $hash );
 
-			// encrypt the string.
-			$ciphertext_raw = openssl_encrypt(
-				$plain_text,
-				$cipher,
-				$enc_key,
-				OPENSSL_RAW_DATA,
-				$iv
+		// encrypt the string.
+		$ciphertext_raw = openssl_encrypt(
+			$plain_text,
+			$cipher,
+			$enc_key,
+			OPENSSL_RAW_DATA,
+			$iv
+		);
+
+		// bail if anything failed.
+		if ( ! $ciphertext_raw ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_encrypt_error',
+				'Given string could not be encrypted.'
 			);
 
-			// bail if anything failed.
-			if ( ! $ciphertext_raw ) {
-				// log this error.
-				$this->get_crypt_obj()->add_error(
-					'openssl_encrypt_error',
-					'Given string could not be encrypted.'
-				);
-
-				// do nothing more.
-				return '';
-			}
-
-			// get the HMAC.
-			$hmac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
-
-			// return the resulting encrypted string.
-			return base64_encode( base64_encode( $iv ) . ':' . base64_encode( $hmac . $ciphertext_raw ) );
+			// do nothing more.
+			return '';
 		}
+
+		// get the HMAC.
+		$hmac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
+
+		// return the resulting encrypted string.
+		return base64_encode( base64_encode( $iv ) . ':' . base64_encode( $hmac . $ciphertext_raw ) );
 	}
 
 	/**
@@ -386,27 +398,94 @@ class OpenSsl extends Method_Base {
 		}
 
 		// decode the encrypted text.
-		$c = base64_decode( $encrypted_text );
+		$c = base64_decode( $encrypted_text, true );
+
+		// bail if the given text is not valid base64.
+		if ( ! is_string( $c ) || '' === $c ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decrypt_payload_invalid',
+				'Encrypted string is not valid base64.'
+			);
+			// do nothing more.
+			return '';
+		}
 
 		// get the hash depending on the used hash type.
 		$hash = $this->get_decoded_master_key();
+
+		// the reason the first, non-legacy attempt failed - reported only if
+		// every attempt in the fallback chain below fails.
+		$first_error = '';
+
+		// prepare the original plaintext.
+		$original_plaintext = '';
 
 		// handle GCM-based ciphers.
 		if ( $this->should_use_aead_tag( $cipher ) ) {
 			// get the parts.
 			$c_exploded = explode( ':', $c );
 
+			// bail if parts are not given.
+			if ( 3 !== count( $c_exploded ) ) {
+				$this->get_crypt_obj()->add_error(
+					'openssl_decrypt_missing_parts',
+					'Encrypted string does not match the expected AEAD format.',
+					array(
+						'parts' => count( $c_exploded ),
+					)
+				);
+				return '';
+			}
+
 			// get the part contents.
-			$iv         = base64_decode( $c_exploded[0] );
-			$tag        = base64_decode( $c_exploded[1] );
-			$ciphertext = base64_decode( $c_exploded[2] );
+			$iv         = base64_decode( $c_exploded[0], true );
+			$tag        = base64_decode( $c_exploded[1], true );
+			$ciphertext = base64_decode( $c_exploded[2], true );
 
-			// try with the current (raw-byte) key first.
-			$original_plaintext = $this->try_decrypt_aead( $cipher, $ciphertext, $iv, $tag, $hash );
+			// bail if any part could not be decoded.
+			if ( ! is_string( $iv ) || ! is_string( $tag ) || ! is_string( $ciphertext ) ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'openssl_decrypt_encrypted_parts_missing',
+					'Parts of the encrypted string could not be decoded.'
+				);
 
-			// fall back to the original legacy key (raw, undecoded hash string).
-			if ( '' === $original_plaintext ) {
-				$original_plaintext = $this->try_decrypt_aead( $cipher, $ciphertext, $iv, $tag, $this->get_hash() );
+				// do nothing more.
+				return '';
+			}
+
+			// bail if IV or tag do not have a length this cipher could ever
+			// have produced - openssl_decrypt() would raise a PHP warning.
+			if ( strlen( $iv ) !== $iv_length || strlen( $tag ) < 4 || strlen( $tag ) > 16 ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'openssl_decrypt_payload_invalid',
+					'IV or AEAD tag of the encrypted string have an unexpected length.',
+					array(
+						'iv_length'  => strlen( $iv ),
+						'tag_length' => strlen( $tag ),
+					)
+				);
+
+				// do nothing more.
+				return '';
+			}
+
+			// the current (raw-byte) key first, then the original legacy key (raw, undecoded hash string).
+			foreach ( array( $hash, $this->get_hash() ) as $key ) {
+				$attempt_error      = '';
+				$original_plaintext = $this->try_decrypt_aead( $cipher, $ciphertext, $iv, $tag, $key, $attempt_error );
+
+				// stop at the first attempt that worked.
+				if ( '' !== $original_plaintext ) {
+					break;
+				}
+
+				// remember why the first, non-legacy attempt failed.
+				if ( '' === $first_error ) {
+					$first_error = $attempt_error;
+				}
 			}
 		} else {
 			// for all other ciphers.
@@ -467,23 +546,38 @@ class OpenSsl extends Method_Base {
 				$ciphertext_raw = substr( $c, $iv_length + $sha2len );
 			}
 
-			// try the new key-separation scheme first.
-			$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $enc_key, $hmac_key );
+			// the current key-separation scheme first, then the decoded
+			// single-key scheme (state B), then the very original scheme with
+			// the undecoded hash string used directly (state A).
+			$legacy_key = $this->get_hash();
+			$key_pairs  = array(
+				array( $enc_key, $hmac_key ),
+				array( $hash, $hash ),
+				array( $legacy_key, $legacy_key ),
+			);
 
-			// fall back to the decoded single-key scheme (state B).
-			if ( '' === $original_plaintext ) {
-				$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $hash, $hash );
-			}
+			foreach ( $key_pairs as $key_pair ) {
+				$attempt_error      = '';
+				$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $key_pair[0], $key_pair[1], $attempt_error );
 
-			// fall back further to the very original scheme: undecoded hash string used directly (state A).
-			if ( '' === $original_plaintext ) {
-				$legacy_key         = $this->get_hash();
-				$original_plaintext = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $legacy_key, $legacy_key );
+				// stop at the first attempt that worked.
+				if ( '' !== $original_plaintext ) {
+					break;
+				}
+
+				// remember why the first, non-legacy attempt failed.
+				if ( '' === $first_error ) {
+					$first_error = $attempt_error;
+				}
 			}
 		}
 
-		// bail if both attempts failed.
+		// bail if every attempt failed.
 		if ( '' === $original_plaintext ) {
+			// report the failure exactly once, now that no fallback is left.
+			$this->add_decrypt_error( $first_error );
+
+			// do nothing more.
 			return '';
 		}
 
@@ -497,6 +591,15 @@ class OpenSsl extends Method_Base {
 	 * @return void
 	 */
 	public function uninstall(): void {
+		// bail if hash is not saved.
+		if ( ! $this->is_hash_saved() ) {
+			// run parent uninstalling tasks.
+			parent::uninstall();
+
+			// do nothing more.
+			return;
+		}
+
 		// initiate the method to get the actual hash.
 		$this->init();
 
@@ -544,58 +647,6 @@ class OpenSsl extends Method_Base {
 	}
 
 	/**
-	 * Try to decrypt and verify a non-AEAD ciphertext with a given key pair.
-	 *
-	 * @param string $cipher          The cipher algorithm.
-	 * @param string $ciphertext_raw  The raw ciphertext.
-	 * @param string $iv              The IV.
-	 * @param string $hmac            The stored HMAC to verify against.
-	 * @param string $enc_key         Key used for decryption.
-	 * @param string $hmac_key        Key used for HMAC verification.
-	 *
-	 * @return string The decrypted plaintext, or '' on failure.
-	 */
-	private function try_decrypt_non_aead( string $cipher, string $ciphertext_raw, string $iv, string $hmac, string $enc_key, string $hmac_key ): string {
-		// get the plain text.
-		$plaintext = openssl_decrypt( $ciphertext_raw, $cipher, $enc_key, OPENSSL_RAW_DATA, $iv );
-
-		// bail if no text could be read.
-		if ( ! is_string( $plaintext ) ) {
-			// log this error.
-			$this->get_crypt_obj()->add_error(
-				'openssl_decrypt_error',
-				'Given string could not be decrypted.'
-			);
-
-			// do nothing more.
-			return '';
-		}
-
-		// bail if hmac is empty.
-		if ( empty( $hmac ) ) {
-			return '';
-		}
-
-		// get the calculated HMAC.
-		$calc_mac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
-
-		// bail if hmac und calculated mac does not match.
-		if ( ! hash_equals( $hmac, $calc_mac ) ) {
-			// log this error.
-			$this->get_crypt_obj()->add_error(
-				'openssl_decrypt_hmac_error',
-				'Check for hmac failed.'
-			);
-
-			// do nothing more.
-			return '';
-		}
-
-		// return the plain text.
-		return $plaintext;
-	}
-
-	/**
 	 * Return the decoded master key as raw bytes, depending on the configured hash type.
 	 *
 	 * @return string
@@ -634,25 +685,120 @@ class OpenSsl extends Method_Base {
 	 * @param string $iv         The IV.
 	 * @param string $tag        The AEAD tag.
 	 * @param string $key        Key to try.
+	 * @param string $error_code Set to the reason this attempt failed, empty on success.
 	 *
 	 * @return string The decrypted plaintext, or '' on failure.
 	 */
-	private function try_decrypt_aead( string $cipher, string $ciphertext, string $iv, string $tag, string $key ): string {
+	private function try_decrypt_aead( string $cipher, string $ciphertext, string $iv, string $tag, string $key, string &$error_code ): string {
+		// reset the reason of this attempt.
+		$error_code = '';
+
 		// decrypt the string.
 		$plaintext = openssl_decrypt( $ciphertext, $cipher, $key, OPENSSL_RAW_DATA, $iv, $tag );
 
 		// bail if decryption failed.
 		if ( ! is_string( $plaintext ) ) {
-			// log this error.
-			$this->get_crypt_obj()->add_error(
-				'openssl_decrypt_aead_error',
-				'Given string could not be decrypted.'
-			);
+			// mark as error.
+			$error_code = 'openssl_decrypt_aead_error';
 
 			// do nothing more.
 			return '';
 		}
 
 		return $plaintext;
+	}
+
+	/**
+	 * Try to decrypt and verify a non-AEAD ciphertext with a given key pair.
+	 *
+	 * @param string $cipher          The cipher algorithm.
+	 * @param string $ciphertext_raw  The raw ciphertext.
+	 * @param string $iv              The IV.
+	 * @param string $hmac            The stored HMAC to verify against.
+	 * @param string $enc_key         Key used for decryption.
+	 * @param string $hmac_key        Key used for HMAC verification.
+	 * @param string $error_code      Set to the reason this attempt failed, empty on success.
+	 *
+	 * @return string The decrypted plaintext, or '' on failure.
+	 */
+	private function try_decrypt_non_aead( string $cipher, string $ciphertext_raw, string $iv, string $hmac, string $enc_key, string $hmac_key, string &$error_code ): string {
+		// reset the reason of this attempt.
+		$error_code = '';
+
+		// get the plain text.
+		$plaintext = openssl_decrypt( $ciphertext_raw, $cipher, $enc_key, OPENSSL_RAW_DATA, $iv );
+
+		// bail if no text could be read.
+		if ( ! is_string( $plaintext ) ) {
+			// mark as error.
+			$error_code = 'openssl_decrypt_error';
+
+			// do nothing more.
+			return '';
+		}
+
+		// bail if hmac is empty.
+		if ( empty( $hmac ) ) {
+			return '';
+		}
+
+		// get the calculated HMAC.
+		$calc_mac = hash_hmac( $this->configuration['hash_algorithm'], $ciphertext_raw, $hmac_key, true );
+
+		// bail if hmac und calculated mac does not match.
+		if ( ! hash_equals( $hmac, $calc_mac ) ) {
+			// log this error.
+			$error_code = 'openssl_decrypt_hmac_error';
+
+			// do nothing more.
+			return '';
+		}
+
+		// return the plain text.
+		return $plaintext;
+	}
+
+	/**
+	 * Encode raw key material in the format this method expects to read it
+	 * back in.
+	 *
+	 * Places, which derive a key themselves - instead of storing one this
+	 * package generated - have to hand it over in the encoding of the method
+	 * that will use it.
+	 *
+	 * @param string $raw_key The raw key material.
+	 *
+	 * @return string
+	 */
+	private function encode_key( string $raw_key ): string {
+		// the pbkdf2 hash type is stored base64 encoded.
+		if ( 'hash_pbkdf2' === $this->configuration['hash_type'] ) {
+			return base64_encode( $raw_key );
+		}
+
+		// everything else is stored hex encoded.
+		return bin2hex( $raw_key );
+	}
+
+	/**
+	 * Report a failed decryption once, after every fallback has been tried.
+	 *
+	 * @param string $error_code The reason of the first attempt, may be empty.
+	 *
+	 * @return void
+	 */
+	private function add_decrypt_error( string $error_code ): void {
+		// fall back to the generic reason if no attempt reported one.
+		if ( '' === $error_code ) {
+			$error_code = 'openssl_decrypt_error';
+		}
+
+		// use the message matching the reported reason.
+		$message = 'openssl_decrypt_hmac_error' === $error_code
+			? 'Check for hmac failed.'
+			: 'Given string could not be decrypted.';
+
+		// log this error.
+		$this->get_crypt_obj()->add_error( $error_code, $message );
 	}
 }

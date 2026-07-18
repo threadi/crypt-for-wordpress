@@ -83,7 +83,6 @@ class Crypt {
 			// do nothing more.
 			return false;
 		}
-		$place_obj->load();
 
 		// loop through the objects to check, which one we could use.
 		foreach ( $this->get_methods_as_objects() as $obj ) {
@@ -91,6 +90,14 @@ class Crypt {
 			if ( ! $obj->is_usable() ) {
 				continue;
 			}
+
+			// tell the place, which constant this method expects, then let it
+			// load whatever it holds into exactly that constant.
+			$place_obj->set_constant( $obj->get_constant() );
+			$place_obj->load();
+
+			// set the used place.
+			$obj->set_place( $place_obj );
 
 			// initiate the method.
 			$obj->init();
@@ -107,8 +114,6 @@ class Crypt {
 
 	/**
 	 * Return an encrypted string.
-	 *
-	 * @access public
 	 *
 	 * @param string $plain_text String to encrypt.
 	 *
@@ -184,7 +189,7 @@ class Crypt {
 	/**
 	 * Return the list of available methods as objects.
 	 *
-	 * @access private
+	 * @internal Used for internal tasks.
 	 *
 	 * @return array<int,Method_Base>
 	 */
@@ -234,6 +239,14 @@ class Crypt {
 	 * @return void
 	 */
 	public function uninstall(): void {
+		// load the place first, so the key it holds is available as constant -
+		// otherwise the methods below cannot tell an existing key from none.
+		$place_obj = $this->get_place();
+		if ( $place_obj instanceof Place_Base ) {
+			$place_obj->load();
+		}
+
+		// check the methods for their uninstallation tasks.
 		foreach ( $this->get_methods_as_objects() as $obj ) {
 			$obj->uninstall();
 		}
@@ -402,9 +415,11 @@ class Crypt {
 	/**
 	 * Return the list of available places as objects.
 	 *
+	 * @internal Used for internal tasks.
+	 *
 	 * @return array<int,Place_Base>
 	 */
-	public function get_places_as_object(): array {
+	public function get_places_as_objects(): array {
 		// bail if this is not a WordPress environment.
 		if ( ! defined( 'ABSPATH' ) ) {
 			return array();
@@ -433,6 +448,9 @@ class Crypt {
 				continue;
 			}
 
+			// set the configuration.
+			$obj->set_config( $this->get_config() );
+
 			// add the object to the list.
 			$list[] = $obj;
 		}
@@ -444,20 +462,17 @@ class Crypt {
 	/**
 	 * Return the place, where the token should be saved.
 	 *
-	 * @access private
+	 * @internal Used for internal tasks.
 	 *
 	 * @return false|Place_Base
 	 */
 	public function get_place(): false|Place_Base {
 		// loop through the objects to check, which one we could use.
-		foreach ( $this->get_places_as_object() as $obj ) {
+		foreach ( $this->get_places_as_objects() as $obj ) {
 			// bail if the method is unusable.
 			if ( ! $obj->is_usable() ) {
 				continue;
 			}
-
-			// set the configuration.
-			$obj->set_config( $this->get_config() );
 
 			// return this place object.
 			return $obj;

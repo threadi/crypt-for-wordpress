@@ -110,7 +110,7 @@ class CustomFile extends Place_Base {
 		// prepare the content.
 		$custom_file_php_content = "<?php\n";
 		// add the constant.
-		$define                   = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+		$define                   = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
 		$custom_file_php_content .= $define;
 
 		// save the changed wp-config.php.
