@@ -42,7 +42,16 @@ class WpConfig extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return Helper::is_writable( $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() ) );
+		// get the path to the wp-config.php.
+		$wp_config_path = $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() );
+
+		// bail if path could not be found.
+		if ( empty( $wp_config_path ) ) {
+			return false;
+		}
+
+		// return whether the detected path is writable.
+		return Helper::is_writable( $wp_config_path );
 	}
 
 	/**
@@ -137,7 +146,7 @@ class WpConfig extends Place_Base {
 	 *
 	 * Uses a dedicated lock-file next to the target (not the target itself, so we never
 	 * interfere with the atomic rename in atomic_put_contents()) and a native flock(),
-	 * since the "WP_Filesystem" abstraction (e.g., for FTP) does not support locking.
+	 * since the "WP_Filesystem" abstraction does not support locking.
 	 * The lock file itself always lives on the local disk (ABSPATH is always local, even if
 	 * WP_Filesystem uses FTP/SSH2 for the actual transfer), so flock() works reliably here.
 	 *
@@ -148,6 +157,24 @@ class WpConfig extends Place_Base {
 	private function with_lock( string $target_path, callable $callback ): void {
 		// define the lock path.
 		$lock_path = $target_path . '.lock';
+
+		// get the "WP_Filesystem" object.
+		$wp_filesystem = Helper::get_wp_filesystem();
+
+		// bail if lock file is not writable.
+		if ( ! $wp_filesystem->is_writable( $lock_path ) ) {
+			// log this as error.
+			$this->get_crypt_obj()->add_error(
+				'wpconfig_lock_not_writable',
+				'The lock-file used to write in the wp-config.php file is not writable. We still try to save key in the file.'
+			);
+
+			// run the callback to save the key.
+			$callback();
+
+			// do nothing more.
+			return;
+		}
 
 		// open (or create) the lock file directly, bypassing "WP_Filesystem" on purpose.
 		$lock_fp = fopen( $lock_path, 'c' );
@@ -179,7 +206,7 @@ class WpConfig extends Place_Base {
 	 *
 	 * Writes to a temporary file first and then moves (renames) it onto the target path.
 	 * A rename on the same filesystem is atomic, so any concurrent reader either sees the
-	 * complete old content or the complete new content - never a truncated/partial file.
+	 * complete old content, or the complete new content - never a truncated/partial file.
 	 *
 	 * @param WP_Filesystem_Base $wp_filesystem The WP_Filesystem-handler to use.
 	 * @param string             $path The target path to write to.
@@ -239,6 +266,10 @@ class WpConfig extends Place_Base {
 	/**
 	 * Return the wp-config.php path.
 	 *
+	 * We detect it as @wp-load.php:
+	 * Primary in WordPress root directory.
+	 * Secondary in the parent directory of the WordPress root if wp-settings.php does not exist there.
+	 *
 	 * @param string $slug The plugin slug for the hook names.
 	 * @return string
 	 */
@@ -254,6 +285,14 @@ class WpConfig extends Place_Base {
 
 		// get the path for wp-config.php.
 		$wp_config_php_path = ABSPATH . $wp_config_php . '.php';
+
+		// get the "WP_Filesystem" object.
+		$wp_filesystem = Helper::get_wp_filesystem();
+
+		// if the file does not exist in this path, check the parent of the root directory.
+		if ( ! $wp_filesystem->exists( $wp_config_php_path ) && ! $wp_filesystem->exists( trailingslashit( dirname( ABSPATH ) ) . 'wp-settings.php' ) ) {
+			$wp_config_php_path = trailingslashit( dirname( ABSPATH ) ) . $wp_config_php . '.php';
+		}
 
 		/**
 		 * Filter the path for the wp-config.php before we return it.

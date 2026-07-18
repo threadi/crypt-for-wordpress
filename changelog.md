@@ -4,8 +4,9 @@
 
 ### Added
 
-- Added database as last fallback if neither wp-config.php nor mu-plugin are writable
+- Added "database" as last fallback if neither wp-config.php nor mu-plugin are writable
 - Added error if no usable place could be found
+- Added support for wp-config.php in the parent directory of the WordPress root (as wp-load.php does)
 
 ### Changed
 
