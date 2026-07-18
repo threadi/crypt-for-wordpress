@@ -47,21 +47,18 @@ class EnvironmentVariable extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// bail if no name for the environment variable is given.
-		if ( empty( $config['environment_variable'] ) ) {
+		if ( empty( $this->configuration['environment_variable'] ) ) {
 			return false;
 		}
 
 		// bail if given value is not a string.
-		if ( ! is_string( $config['environment_variable'] ) ) {
+		if ( ! is_string( $this->configuration['environment_variable'] ) ) {
 			return false;
 		}
 
 		// return true if the environment variable is set and filled.
-		return ! empty( $_ENV[ $config['environment_variable'] ] );
+		return ! empty( $_ENV[ $this->configuration['environment_variable'] ] );
 	}
 
 	/**
@@ -70,11 +67,8 @@ class EnvironmentVariable extends Place_Base {
 	 * @return void
 	 */
 	public function load(): void {
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// bail if no name for the environment variable is given.
-		if ( empty( $config['environment_variable'] ) ) {
+		if ( empty( $this->configuration['environment_variable'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'environment_variable_missing',
@@ -86,7 +80,7 @@ class EnvironmentVariable extends Place_Base {
 		}
 
 		// bail if given value is not a string.
-		if ( ! is_string( $config['environment_variable'] ) ) {
+		if ( ! is_string( $this->configuration['environment_variable'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'environment_variable_not_a_string',
@@ -97,14 +91,14 @@ class EnvironmentVariable extends Place_Base {
 			return;
 		}
 
-		// bail if given environment variable does not exist.
-		if ( empty( $_ENV[ $config['environment_variable'] ] ) ) {
+		// bail if the given environment variable does not exist.
+		if ( empty( $_ENV[ $this->configuration['environment_variable'] ] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'environment_variable_missing_in_server',
 				'The environment variable. Did you miss the configuration in your hosting?',
 				array(
-					'environment_variable' => $config['environment_variable'],
+					'environment_variable' => $this->configuration['environment_variable'],
 				)
 			);
 
@@ -113,6 +107,6 @@ class EnvironmentVariable extends Place_Base {
 		}
 
 		// set the variable as constant.
-		define( $config['environment_variable'], sanitize_text_field( wp_unslash( $_ENV[ $config['environment_variable'] ] ) ) );
+		define( $this->configuration['environment_variable'], sanitize_text_field( wp_unslash( $_ENV[ $this->configuration['environment_variable'] ] ) ) );
 	}
 }

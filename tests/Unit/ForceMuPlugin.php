@@ -29,11 +29,19 @@ class ForceMuPlugin extends CryptForWordPressTests {
 
         // test it.
         $place = $crypt_obj->get_place();
-        if( ! is_bool( $place ) ) {
-            $this->assertIsObject($place);
-            $this->assertInstanceOf('\CryptForWordPress\Places\MuPlugin', $place);
-            $this->assertIsBool($place->is_usable());
-            $this->assertTrue($place->is_usable());
+
+        if ( ! is_bool( $place ) ) {
+            // the mu-plugins directory is writable in this environment: full check.
+            $this->assertIsObject( $place );
+            $this->assertInstanceOf( '\CryptForWordPress\Places\MuPlugin', $place );
+            $this->assertIsBool( $place->is_usable() );
+            $this->assertTrue( $place->is_usable() );
+            return;
         }
+
+        // the mu-plugins directory is not writable in this environment
+        // (e.g. WPMU_PLUGIN_DIR missing or not writable on this host) -
+        // get_place() must then reliably return false instead of an object.
+        $this->assertFalse( $place );
     }
 }

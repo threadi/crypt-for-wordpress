@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added "database" as last fallback if neither wp-config.php nor mu-plugin are writable
+- Added support for "WordPress Salts" as key for the encryption
+- Added error if no usable place could be found
+- Added support for wp-config.php in the parent directory of the WordPress root (as wp-load.php does)
+
+### Changed
+
+- Set configuration for places like methods
+- Optimized the generation of the "must-use"-plugin header
+- Configuration option to block the usage of the database for the key
+- Check for IV length in OpenSSL in one identical way
+- Configured preset for file permissions for the places "custom file" and "must-use"-plugin
+- Check for given a file permissions and converting them to octal
+
+### Fixed
+
+- Fixed check if the "must-use"-plugin-directory is writable
+- Fixed a potential exception in the Sodium method if a falsy key is given
+- Fixed a faulty file permission format for the "custom file" and the "must-use"-plugin methods
+
 ## [2.0.1] - 26.06.2026
 
 ### Fixed
@@ -10,21 +34,21 @@
 
 ### Added
 
-- Added 2 new places for the key
+- Added two new places for the key
 -> an environment variable from .env-file
 -> a server variable in the hosting
 - Added the function debug() to return the actual configuration for debugging purposes
-- Added documentations for each place and method 
+- Added documentation for each place and method 
 - Added error handling
 
 ### Changed
 
-- Load a given custom file before the method will be loaded to embed its constants
+- Load a given custom file before the method is loaded to embed its constants
 - Replaced usage of wp_rand() with the more secure random_bytes()
 - Hardening usage of OpenSSL and Sodium
-- Lock wp-config.php if file will be changed to prevent errors through other PHP processes
-- Move the entry in wp-config.php just above the ABSPATH-entry, with a fallback to head of file if it does not exist
-- Sanitize plugin variables for the generated "Must Use"-plugin
+- Lock wp-config.php if the file is changed to prevent errors through other PHP processes
+- Move the entry in wp-config.php just above the ABSPATH-entry, with a fallback to the head of the file if it does not exist
+- Sanitize plugin variables for the generated "must-use"-plugin
 
 ### Fixed
 
@@ -82,7 +106,7 @@
 
 ### Changed
 
-- Prevent direct access on encrypt and decrypt methods in crypt objects
+- Prevent direct access to encrypt and decrypt methods in crypt objects
 - Prevent usage of this package outside of WordPress
 
 ## [1.0.2] - 15.03.2026

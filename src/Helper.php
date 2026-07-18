@@ -68,4 +68,65 @@ class Helper {
 		// return the requested filesystem object.
 		return $wp_filesystem;
 	}
+
+	/**
+	 * Make an arbitrary string safe to embed into generated PHP source code
+	 * (e.g. inside a "// ..." line comment or a "/** ... *​/" doc comment).
+	 *
+	 * @param string $value The value to embed (e.g. plugin name, author, slug).
+	 *
+	 * @return string The sanitized, single-line-safe value.
+	 */
+	public static function sanitize_for_php_comment( string $value ): string {
+		// remove all control characters, including CR/LF, so the value
+		// can never end the line the generated comment is written on.
+		$value = preg_replace( '/[\x00-\x1F\x7F]/', '', $value );
+
+		// bail if the regex failed for some reason.
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		// break up any "*/" sequence so a "/** ... */" doc comment cannot be
+		// closed prematurely by attacker-/plugin-author-controlled content.
+		return str_replace( '*/', '* /', $value );
+	}
+
+	/**
+	 * Check a given file permission and return the correct octal value.
+	 *
+	 * @param mixed $file_permission The given file permission.
+	 *
+	 * @return int
+	 */
+	public static function get_permission( mixed $file_permission ): int {
+		$allowed = array(
+			'0600',
+			'0640',
+			'0644',
+			'0660',
+			'0664',
+		);
+
+		// check if the given value is a string and if it is a valid octal value.
+		if ( is_string( $file_permission ) ) {
+			$file_permission = sanitize_text_field( $file_permission );
+
+			if ( in_array( $file_permission, $allowed, true ) ) {
+				return (int) octdec( $file_permission );
+			}
+		}
+
+		// check if the given value is an integer and if it is a valid octal value.
+		if ( is_int( $file_permission ) ) {
+			foreach ( $allowed as $permission ) {
+				if ( octdec( $permission ) === $file_permission ) {
+					return (int) $file_permission;
+				}
+			}
+		}
+
+		// return the default value.
+		return (int) octdec( '0640' );
+	}
 }

@@ -48,7 +48,7 @@ Format:
 ```
 array(
     'force_method' => 'openssl', // openssl or sodium.
-    'force_place' => 'wpconfig', // supported places.
+    'force_place' => 'wpconfig', // one of the supported places.
     'openssl' => array(
         'hash_type' => 'hash_pbkdf2', // hash_pbkdf2 or hash.
         'hash_algorithm' => 'sha256' // see hints below.
@@ -113,6 +113,22 @@ $crypt = new \CryptForWordPress\Crypt( __FILE__ );
 $crypt->uninstall();
 ```
 
+## Places
+
+The key, used to encrypt and decrypt strings, are saved in one place.
+
+We support following places:
+
+| Place               | Default Order | Description                                                  |
+|---------------------|---------------|--------------------------------------------------------------|
+| CustomFile          |               | Use a custom file to store the key.                          |
+| Database            | 3             | Save the key in the WordPress-own database - not recommended |
+| EnvironmentVariable |               | Use an $_ENV variable in your hosting for the key.           |
+| MuPlugin            | 2             | Let us create an custom "must-use"-plugin to save the key.   |
+| ServerVariable      |               | Use an $_SERVER variable in your hosting for the key.        |
+| WordPressSalts      |               | Use a WordPress Salts as key.                                |
+| WpConfig            | 1             | Let us save the key in your wp-config.php                    |
+
 ## Check for WordPress Coding Standards
 
 ### Initialize
@@ -121,11 +137,11 @@ $crypt->uninstall();
 
 ### Run
 
-`vendor/bin/phpcs --standard=ruleset.xml vendor/threadi/easy-directory-listing-for-wordpress/`
+`vendor/bin/phpcs .`
 
 ### Repair
 
-`vendor/bin/phpcbf --standard=ruleset.xml vendor/threadi/easy-directory-listing-for-wordpress/`
+`vendor/bin/phpcbf .`
 
 ## Analyse with PHPStan
 

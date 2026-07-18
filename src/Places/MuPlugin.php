@@ -1,6 +1,10 @@
 <?php
 /**
- * File to handle a mu-plugin as place to save the key.
+ * File to handle a mu-plugin as the place to save the key.
+ *
+ *  Configuration:
+ *  - 'force_place' => 'muplugin', // optional.
+ *  - 'file_permissions' => '0640', // optional.
  *
  * @package crypt-for-wordpress
  */
@@ -15,7 +19,7 @@ use CryptForWordPress\Helper;
 use CryptForWordPress\Place_Base;
 
 /**
- * Object to handle a mu-plugin as place to save the key.
+ * Object to handle a mu-plugin as the place to save the key.
  */
 class MuPlugin extends Place_Base {
 
@@ -25,6 +29,15 @@ class MuPlugin extends Place_Base {
 	 * @var string
 	 */
 	protected string $name = 'muplugin';
+
+	/**
+	 * The method configurations.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $configuration = array(
+		'file_permissions' => '0640',
+	);
 
 	/**
 	 * Constructor for this object.
@@ -41,7 +54,7 @@ class MuPlugin extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		// bail if the "must use"-plugin-directory is not set.
+		// bail if the "must-use"-plugin-directory is not set.
 		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
@@ -56,13 +69,13 @@ class MuPlugin extends Place_Base {
 		// get the filesystem handler.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
-		// bail if the "must use"-plugin-parent-directory is not writeable, and the "must-use"-plugin-directory does not exist.
+		// bail if the "must-use"-plugin-parent-directory is not writeable, and the "must-use"-plugin-directory does not exist.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) && ! Helper::is_writable( dirname( WPMU_PLUGIN_DIR ) ) ) {
 			return false;
 		}
 
 		// return the result of the check if the "must-use"-plugin-parent-directory is writable.
-		return Helper::is_writable( dirname( WPMU_PLUGIN_DIR ) );
+		return Helper::is_writable( WPMU_PLUGIN_DIR );
 	}
 
 	/**
@@ -78,7 +91,7 @@ class MuPlugin extends Place_Base {
 		// create a custom must-use-plugin instead.
 		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
 
-		// create mu-plugin directory if it is missing.
+		// create the "must-use"-directory if it is missing.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {
 			$wp_filesystem->mkdir( WPMU_PLUGIN_DIR );
 		}
@@ -100,11 +113,8 @@ class MuPlugin extends Place_Base {
 			return;
 		}
 
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $file_path, (int) $config['file_permissions'] ) ) {
+		if ( ! $wp_filesystem->chmod( $file_path, Helper::get_permission( $this->configuration['file_permissions'] ) ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'muplugin_could_set_permissions',
@@ -130,16 +140,16 @@ class MuPlugin extends Place_Base {
 	private function get_php_header(): string {
 		return '
 /**
- * Plugin Name:       Encryption for ' . sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) . '
- * Description:       Holds the hash value to use encryption within ' . sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) . '.
+ * Plugin Name:       Encryption for ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) ) . '
+ * Description:       Holds the hash value to use encryption within ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_plugin_name() ) ) . '.
  * Requires at least: 4.9.24
  * Requires PHP:      8.1
  * Version:           1.0.0
- * Author:            ' . sanitize_text_field( $this->get_crypt_obj()->get_plugin_author() ) . '
- * Author URI:        ' . sanitize_url( $this->get_crypt_obj()->get_plugin_author_url() ) . '
- * Text Domain:       ' . sanitize_text_field( $this->get_crypt_obj()->get_slug() ) . '-hash
+ * Author:            ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_plugin_author() ) ) . '
+ * Author URI:        ' . Helper::sanitize_for_php_comment( sanitize_url( $this->get_crypt_obj()->get_plugin_author_url() ) ) . '
+ * Text Domain:       ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_slug() ) ) . '-hash
  *
- * @package ' . sanitize_text_field( $this->get_crypt_obj()->get_slug() ) . '-hash
+ * @package ' . Helper::sanitize_for_php_comment( sanitize_text_field( $this->get_crypt_obj()->get_slug() ) ) . '-hash
  */';
 	}
 
@@ -173,7 +183,7 @@ class MuPlugin extends Place_Base {
 		// define the path.
 		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename();
 
-		// bail if file does not exist.
+		// bail if the file does not exist.
 		if ( ! $wp_filesystem->exists( $file_path ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(

@@ -42,7 +42,16 @@ class WpConfig extends Place_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return Helper::is_writable( $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() ) );
+		// get the path to the wp-config.php.
+		$wp_config_path = $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() );
+
+		// bail if path could not be found.
+		if ( empty( $wp_config_path ) ) {
+			return false;
+		}
+
+		// return whether the detected path is writable.
+		return Helper::is_writable( $wp_config_path );
 	}
 
 	/**
@@ -91,11 +100,11 @@ class WpConfig extends Place_Base {
 				$wp_config_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $wp_config_php_content );
 
 				// add the constant.
-				$define = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . $this->get_crypt_obj()->get_plugin_name() . ".\r\n";
+				$define = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
 
 				// insert right before the (non-localized) ABSPATH-check that follows the
 				// translatable "stop editing" comment - this works regardless of the
-				// installations language, since the comment text itself is translated
+				// installation language, since the comment text itself is translated
 				// but this code block never is.
 				$abspath_pattern = '@^[\t ]*if\s*\(\s*!\s*defined\s*\(\s*["\']ABSPATH["\']\s*\)\s*\)\s*\{@miU';
 
@@ -113,7 +122,7 @@ class WpConfig extends Place_Base {
 					$wp_config_php_content = preg_replace( '@<\?php\s*@i', "<?php\n$define", (string) $wp_config_php_content, 1 );
 				}
 
-				// bail if resulting value is not a string.
+				// bail if the resulting value is not a string.
 				if ( ! is_string( $wp_config_php_content ) ) {
 					// log this error.
 					$this->get_crypt_obj()->add_error(
@@ -137,8 +146,8 @@ class WpConfig extends Place_Base {
 	 *
 	 * Uses a dedicated lock-file next to the target (not the target itself, so we never
 	 * interfere with the atomic rename in atomic_put_contents()) and a native flock(),
-	 * since the "WP_Filesystem" abstraction (e.g., for FTP) does not support locking.
-	 * The lock file itself always lives on local disk (ABSPATH is always local, even if
+	 * since the "WP_Filesystem" abstraction does not support locking.
+	 * The lock file itself always lives on the local disk (ABSPATH is always local, even if
 	 * WP_Filesystem uses FTP/SSH2 for the actual transfer), so flock() works reliably here.
 	 *
 	 * @param string   $target_path The file the callback will modify.
@@ -148,6 +157,24 @@ class WpConfig extends Place_Base {
 	private function with_lock( string $target_path, callable $callback ): void {
 		// define the lock path.
 		$lock_path = $target_path . '.lock';
+
+		// get the "WP_Filesystem" object.
+		$wp_filesystem = Helper::get_wp_filesystem();
+
+		// bail if lock file is not writable.
+		if ( ! $wp_filesystem->is_writable( $lock_path ) ) {
+			// log this as error.
+			$this->get_crypt_obj()->add_error(
+				'wpconfig_lock_not_writable',
+				'The lock-file used to write in the wp-config.php file is not writable. We still try to save key in the file.'
+			);
+
+			// run the callback to save the key.
+			$callback();
+
+			// do nothing more.
+			return;
+		}
 
 		// open (or create) the lock file directly, bypassing "WP_Filesystem" on purpose.
 		$lock_fp = fopen( $lock_path, 'c' );
@@ -218,11 +245,8 @@ class WpConfig extends Place_Base {
 			return;
 		}
 
-		// get the configuration.
-		$config = $this->get_crypt_obj()->get_config();
-
 		// set the file permissions, if set.
-		if ( ! empty( $config['file_permissions'] ) && ! $wp_filesystem->chmod( $path, (int) $config['file_permissions'] ) ) {
+		if ( ! empty( $this->configuration['file_permissions'] ) && ! $wp_filesystem->chmod( $path, (int) $this->configuration['file_permissions'] ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'wpconfig_php_could_set_permissions',
@@ -242,6 +266,10 @@ class WpConfig extends Place_Base {
 	/**
 	 * Return the wp-config.php path.
 	 *
+	 * We detect it as @wp-load.php:
+	 * Primary in WordPress root directory.
+	 * Secondary in the parent directory of the WordPress root if wp-settings.php does not exist there.
+	 *
 	 * @param string $slug The plugin slug for the hook names.
 	 * @return string
 	 */
@@ -257,6 +285,14 @@ class WpConfig extends Place_Base {
 
 		// get the path for wp-config.php.
 		$wp_config_php_path = ABSPATH . $wp_config_php . '.php';
+
+		// get the "WP_Filesystem" object.
+		$wp_filesystem = Helper::get_wp_filesystem();
+
+		// if the file does not exist in this path, check the parent of the root directory.
+		if ( ! $wp_filesystem->exists( $wp_config_php_path ) && ! $wp_filesystem->exists( trailingslashit( dirname( ABSPATH ) ) . 'wp-settings.php' ) ) {
+			$wp_config_php_path = trailingslashit( dirname( ABSPATH ) ) . $wp_config_php . '.php';
+		}
 
 		/**
 		 * Filter the path for the wp-config.php before we return it.
