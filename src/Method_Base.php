@@ -43,6 +43,13 @@ class Method_Base {
 	protected Crypt $crypt_obj;
 
 	/**
+	 * The place this method gets its key from.
+	 *
+	 * @var Place_Base|null
+	 */
+	private ?Place_Base $place_obj = null;
+
+	/**
 	 * Initialize this crypt method.
 	 *
 	 * @return void
@@ -70,7 +77,7 @@ class Method_Base {
 	/**
 	 * Encrypt a given string.
 	 *
-	 * @access private
+	 * @internal Used for internal tasks.
 	 *
 	 * @param string $plain_text The plain string.
 	 *
@@ -128,7 +135,7 @@ class Method_Base {
 		}
 
 		// return the value of our constant.
-		return get_defined_constants()[ $this->get_constant() ];
+		return $constants[ $this->get_constant() ];
 	}
 
 	/**
@@ -168,7 +175,7 @@ class Method_Base {
 	 *
 	 * @return string
 	 */
-	protected function get_constant(): string {
+	public function get_constant(): string {
 		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
 
 		/**
@@ -186,7 +193,7 @@ class Method_Base {
 	 * @return void
 	 */
 	public function uninstall(): void {
-		foreach ( $this->get_crypt_obj()->get_places_as_object() as $obj ) {
+		foreach ( $this->get_crypt_obj()->get_places_as_objects() as $obj ) {
 			$obj->uninstall( $this->get_constant() );
 		}
 	}
@@ -208,5 +215,30 @@ class Method_Base {
 	 */
 	protected function get_crypt_obj(): Crypt {
 		return $this->crypt_obj;
+	}
+
+	/**
+	 * Set the place this method gets its key from.
+	 *
+	 * @param Place_Base $place_obj The place object.
+	 * @return void
+	 */
+	public function set_place( Place_Base $place_obj ): void {
+		$this->place_obj = $place_obj;
+	}
+
+	/**
+	 * Return the raw key material the configured place derives itself, if any.
+	 *
+	 * @return string
+	 */
+	protected function get_derived_key(): string {
+		// bail if no place has been set.
+		if ( ! $this->place_obj instanceof Place_Base ) {
+			return '';
+		}
+
+		// return whatever the place is able to derive.
+		return $this->place_obj->get_derived_key();
 	}
 }

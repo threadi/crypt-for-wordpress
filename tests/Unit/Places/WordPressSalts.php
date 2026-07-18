@@ -7,7 +7,6 @@
 
 namespace CryptForWordPress\Tests\Unit\Places;
 
-use CryptForWordPress\Crypt;
 use CryptForWordPress\Tests\CryptForWordPressTests;
 
 /**
@@ -18,9 +17,9 @@ class WordPressSalts extends CryptForWordPressTests {
     /**
      * The crypt object.
      *
-     * @var Crypt
+     * @var \CryptForWordPress\Crypt
      */
-    private Crypt $crypt_obj;
+    private \CryptForWordPress\Crypt $crypt_obj;
 
     /**
      * Run before every test.
@@ -28,7 +27,7 @@ class WordPressSalts extends CryptForWordPressTests {
      * @return void
      */
     public function set_up(): void {
-        $this->crypt_obj = new Crypt( self::get_plugin_path() );
+        $this->crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
         $this->crypt_obj->set_slug( 'wordpress-salts-test-' . uniqid('', true) );
     }
 
@@ -101,25 +100,6 @@ class WordPressSalts extends CryptForWordPressTests {
     }
 
     /**
-     * Test that load() does not fatally error and does not define our constant
-     * if the configured salt constant does not exist.
-     *
-     * @return void
-     */
-    public function test_load_with_undefined_salt_constant(): void {
-        $place = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
-        $place->set_config( array( 'salt' => 'THIS_SALT_CONSTANT_DOES_NOT_EXIST' ) );
-
-        $expected_constant = strtoupper( $this->crypt_obj->get_slug() ) . '-HASH';
-        $this->assertFalse( defined( $expected_constant ) );
-
-        $place->load();
-
-        // the constant must still be undefined - there was nothing valid to derive it from.
-        $this->assertFalse( defined( $expected_constant ) );
-    }
-
-    /**
      * Test that load() defines our constant with the real salt value - and under
      * the exact same constant name Method_Base::get_constant() expects - if the
      * configured salt constant exists.
@@ -133,23 +113,22 @@ class WordPressSalts extends CryptForWordPressTests {
 
         $place = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
 
-        $expected_constant = strtoupper( $this->crypt_obj->get_slug() ) . '-HASH';
-        $this->assertFalse( defined( $expected_constant ) );
+        $expected = hash_hkdf( 'sha256', SECURE_AUTH_SALT, 32, $this->crypt_obj->get_slug() . '-wordpress-salts' );
 
-        $place->load();
+        $this->assertSame( $expected, $place->get_derived_key() );
+        $this->assertSame( 32, strlen( $place->get_derived_key() ) );
+    }
 
-        $this->assertTrue( defined( $expected_constant ) );
+    /**
+     * Same for not existing salt.
+     *
+     * @return void
+     */
+    public function test_derived_key_is_empty_for_undefined_salt_constant(): void {
+        $place = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
+        $place->set_config( array( 'salt' => 'THIS_SALT_CONSTANT_DOES_NOT_EXIST' ) );
 
-        // the value must be the hex-encoded HKDF derivation, not the raw salt.
-        $expected_key = bin2hex(
-            hash_hkdf( 'sha256', SECURE_AUTH_SALT, 32, $this->crypt_obj->get_slug() . '-wordpress-salts' )
-        );
-        $this->assertSame( $expected_key, constant( $expected_constant ) );
-
-        // and it must actually be valid, even-length hex, or the encrypt/decrypt
-        // round trip would fail again with hex2bin().
-        $this->assertMatchesRegularExpression( '/^[0-9a-f]+$/', constant( $expected_constant ) );
-        $this->assertSame( 0, strlen( constant( $expected_constant ) ) % 2 );
+        $this->assertSame( '', $place->get_derived_key() );
     }
 
     /**

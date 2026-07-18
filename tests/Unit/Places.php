@@ -42,7 +42,7 @@ class Places extends CryptForWordPressTests {
         $crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 
         // return each supported method.
-        foreach( $crypt_obj->get_places_as_object() as $method ) {
+        foreach( $crypt_obj->get_places_as_objects() as $method ) {
             yield array( $method );
         }
     }

@@ -14,6 +14,7 @@ use CryptForWordPress\Crypt;
 use CryptForWordPress\Helper;
 use CryptForWordPress\Place_Base;
 use WP_Filesystem_Base;
+use WP_Filesystem_Direct;
 
 /**
  * Object to handle the wp-config.php as place to save the key.
@@ -95,7 +96,7 @@ class WpConfig extends Place_Base {
 				}
 
 				// remove previous value.
-				$placeholder           = '## ' . strtoupper( $this->get_crypt_obj()->get_plugin_name() ) . ' placeholder ##';
+				$placeholder           = '## ' . strtoupper( Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) ) . ' placeholder ##';
 				$wp_config_php_content = preg_replace( '@^[\t ]*define\s*\(\s*["\']' . preg_quote( $this->get_constant(), '@' ) . '["\'].*$@miU', $placeholder, $wp_config_php_content );
 				$wp_config_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $wp_config_php_content );
 
@@ -155,11 +156,20 @@ class WpConfig extends Place_Base {
 	 * @return void
 	 */
 	private function with_lock( string $target_path, callable $callback ): void {
-		// define the lock path.
-		$lock_path = $target_path . '.lock';
-
 		// get the "WP_Filesystem" object.
 		$wp_filesystem = Helper::get_wp_filesystem();
+
+		// we can only lock on filesystem handler.
+		if ( ! $wp_filesystem instanceof WP_Filesystem_Direct ) {
+			// run the callback to save the key.
+			$callback();
+
+			// do nothing more.
+			return;
+		}
+
+		// define the lock path.
+		$lock_path = $target_path . '.lock';
 
 		// bail if lock file is not writable.
 		if ( ! $wp_filesystem->is_writable( $lock_path ) ) {
@@ -219,7 +229,7 @@ class WpConfig extends Place_Base {
 		$tmp_path = $path . '.tmp-' . wp_generate_password( 12, false );
 
 		// write the new content to the temp file first.
-		if ( ! $wp_filesystem->put_contents( $tmp_path, $content ) ) {
+		if ( ! $wp_filesystem->put_contents( $tmp_path, $content, Helper::get_permission( $wp_filesystem->getchmod( $path ) ) ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'wpconfig_php_could_not_write',
@@ -246,7 +256,7 @@ class WpConfig extends Place_Base {
 		}
 
 		// set the file permissions, if set.
-		if ( ! empty( $this->configuration['file_permissions'] ) && ! $wp_filesystem->chmod( $path, (int) $this->configuration['file_permissions'] ) ) {
+		if ( ! empty( $this->configuration['file_permissions'] ) && ! $wp_filesystem->chmod( $path, Helper::get_permission( $this->configuration['file_permissions'] ) ) ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'wpconfig_php_could_set_permissions',
@@ -261,6 +271,14 @@ class WpConfig extends Place_Base {
 		if ( function_exists( 'opcache_invalidate' ) ) {
 			opcache_invalidate( $path, true );
 		}
+
+		/**
+		 * Run tasks after wp-config.php has been written.
+		 *
+		 * @since 3.0.0 Available since 3.0.0.
+		 * @param string $path The path to the wp-config.php.
+		 */
+		do_action( $this->get_crypt_obj()->get_slug() . '_wp_config_written', $path );
 	}
 
 	/**

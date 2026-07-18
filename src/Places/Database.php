@@ -77,9 +77,12 @@ class Database extends Place_Base {
 		// get the hash from the database.
 		$hash = get_option( $this->get_option_name(), '' );
 
+		// get the constant this place has been told to fill.
+		$constant = $this->get_constant();
+
 		// set the constant.
-		if ( ! empty( $hash ) && ! defined( $this->get_constant_name() ) ) {
-			define( $this->get_constant_name(), $hash );
+		if ( ! empty( $hash ) && ! empty( $constant ) && ! defined( $constant ) ) {
+			define( $constant, $hash );
 		}
 
 		// log a warning.
@@ -107,22 +110,5 @@ class Database extends Place_Base {
 	 */
 	public function uninstall( string $constant ): void {
 		delete_option( $this->get_option_name() );
-	}
-
-	/**
-	 * Return the name of the constant.
-	 *
-	 * @return string
-	 */
-	private function get_constant_name(): string {
-		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
-
-		/**
-		 * Filter the name of the constant.
-		 *
-		 * @since 1.1.2 Available since 1.1.2.
-		 * @param string $constant The constant name.
-		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
 	}
 }
