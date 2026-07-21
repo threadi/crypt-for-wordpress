@@ -272,13 +272,14 @@ class WpConfig extends Place_Base {
 			opcache_invalidate( $path, true );
 		}
 
+		$slug = $this->get_crypt_obj()->get_slug();
 		/**
 		 * Run tasks after wp-config.php has been written.
 		 *
 		 * @since 3.0.0 Available since 3.0.0.
 		 * @param string $path The path to the wp-config.php.
 		 */
-		do_action( $this->get_crypt_obj()->get_slug() . '_wp_config_written', $path );
+		do_action( $slug . '_crypt_wp_config_written', $path );
 	}
 
 	/**
@@ -299,7 +300,7 @@ class WpConfig extends Place_Base {
 		 * @since 1.0.0 Available since 1.0.0.
 		 * @param string $wp_config_php The filename.
 		 */
-		$wp_config_php = apply_filters( $slug . '_wp_config_name', $wp_config_php );
+		$wp_config_php = apply_filters( $slug . '_crypt_wp_config_name', $wp_config_php );
 
 		// get the path for wp-config.php.
 		$wp_config_php_path = ABSPATH . $wp_config_php . '.php';

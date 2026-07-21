@@ -59,13 +59,14 @@ class Database extends Place_Base {
 	private function get_option_name(): string {
 		$option_name = $this->get_crypt_obj()->get_slug() . '-hash';
 
+		$slug = $this->get_crypt_obj()->get_slug();
 		/**
 		 * Filter the name of the option in the database.
 		 *
 		 * @since 2.1.0 Available since 2.1.0.
 		 * @param string $option_name The option name.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_database_option_name', $option_name );
+		return apply_filters( $slug . '_crypt_database_option_name', $option_name );
 	}
 
 	/**
