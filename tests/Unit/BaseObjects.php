@@ -91,7 +91,6 @@ class BaseObjects extends CryptForWordPressTests {
 		$method->set_config( array( 'hash_algorithm' => 'sha512' ) );
 
 		$property = new \ReflectionProperty( $method, 'configuration' );
-		$property->setAccessible( true );
 		$config = (array) $property->getValue( $method );
 
 		$this->assertSame( 'AES-256-CBC', $config['cipher_algorithm'] );
@@ -142,8 +141,6 @@ class BaseObjects extends CryptForWordPressTests {
 		$place->set_constant( $constant );
 
 		$property = new \ReflectionProperty( \CryptForWordPress\Place_Base::class, 'constant' );
-		$property->setAccessible( true );
-
 		$this->assertSame( $constant, $property->getValue( $place ) );
 	}
 

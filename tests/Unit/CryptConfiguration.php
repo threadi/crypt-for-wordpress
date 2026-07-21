@@ -220,7 +220,6 @@ class CryptConfiguration extends CryptForWordPressTests {
 
 		// read the protected configuration of the method object.
 		$property = new \ReflectionProperty( $methods[0], 'configuration' );
-		$property->setAccessible( true );
 		$config = (array) $property->getValue( $methods[0] );
 
 		// the given value has been applied ...
