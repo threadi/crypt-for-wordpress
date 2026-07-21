@@ -95,7 +95,7 @@ class CryptErrorHandling extends CryptForWordPressTests {
 		$fired = array();
 
 		add_action(
-			$this->crypt_obj->get_slug() . '_error',
+			$this->crypt_obj->get_slug() . '_crypt_error',
 			function ( $code, $message, $data ) use ( &$fired ) {
 				$fired[] = array( $code, $message, $data );
 			},
@@ -163,7 +163,7 @@ class CryptErrorHandling extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_missing_place_reports_an_error(): void {
-		add_filter( $this->crypt_obj->get_slug() . '_places', '__return_empty_array' );
+		add_filter( $this->crypt_obj->get_slug() . '_crypt_places', '__return_empty_array' );
 
 		$this->assertFalse( $this->crypt_obj->get_place() );
 		$this->assertFalse( $this->crypt_obj->get_method() );
@@ -179,7 +179,7 @@ class CryptErrorHandling extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_save_in_place_without_place_reports_an_error(): void {
-		add_filter( $this->crypt_obj->get_slug() . '_places', '__return_empty_array' );
+		add_filter( $this->crypt_obj->get_slug() . '_crypt_places', '__return_empty_array' );
 
 		$this->crypt_obj->save_in_place( strtoupper( $this->crypt_obj->get_slug() ) . '-HASH', 'some-hash' );
 
