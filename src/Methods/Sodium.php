@@ -166,13 +166,14 @@ class Sodium extends Method_Base {
 	public function get_constant(): string {
 		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-SODIUM-HASH';
 
+		$slug = $this->get_crypt_obj()->get_slug();
 		/**
 		 * Filter the name of the constant.
 		 *
 		 * @since 1.1.2 Available since 1.1.2.
 		 * @param string $constant The constant name.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		return apply_filters( $slug . '_crypt_constant', $constant );
 	}
 
 	/**

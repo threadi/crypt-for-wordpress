@@ -4,11 +4,12 @@
 
 ### Added
 
-- Added "database" as last fallback if neither wp-config.php nor mu-plugin are writable
-- Added support for "WordPress Salts" as key for the encryption
+- Added "database" as the last fallback if neither wp-config.php nor mu-plugin are writable
+- Added support for "WordPress Salts" as the key for the encryption
 - Added error if no usable place could be found
 - Added support for wp-config.php in the parent directory of the WordPress root (as wp-load.php does)
-- Added multiple more PHP Unit Test to ensure functionality of this package
+- Added multiple more PHP Unit Test to ensure the functionality of this package
+- Added documentation for the hooks this package provides
 
 ### Changed
 
@@ -17,8 +18,9 @@
 - Configuration option to block the usage of the database for the key
 - Check for IV length in OpenSSL in one identical way
 - Configured preset for file permissions for the places "custom file" and "must-use"-plugin
-- Check for given a file permissions and converting them to octal
+- Check for the given file permission and convert them to octal
 - Check for available places with the given custom configuration
+- Renamed some hooks
 
 ### Fixed
 
