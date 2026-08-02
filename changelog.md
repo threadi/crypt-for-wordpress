@@ -19,6 +19,7 @@
 - Configured preset for file permissions for the places "custom file" and "must-use"-plugin
 - Check for given a file permissions and converting them to octal
 - Check for available places with the given custom configuration
+- Now required PHP 8.2 or newer
 
 ### Fixed
 
