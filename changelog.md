@@ -21,6 +21,7 @@
 - Check for the given file permission and convert them to octal
 - Check for available places with the given custom configuration
 - Renamed some hooks
+- Now required PHP 8.2 or newer
 
 ### Fixed
 

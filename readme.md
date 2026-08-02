@@ -4,13 +4,13 @@ This repository contains the source code for the Composer package “Crypt for W
 
 ## How it works
 
-A hash key is generated for each plugin or theme, that is used for all encryption and decryption. This key is stored one of the supported places (like the file **wp-config.php**). As a result, it is not stored in the database where the encrypted data resides, keeping the key and the data separate. This makes it more difficult for attackers to decrypt the data, as they would need both to be successful.
+A hash key is generated for each plugin or theme, that is used for any encryption and decryption this plugin requests. This key is stored one of the supported places (like the file **wp-config.php**). As a result, it is not stored in the database where the encrypted data resides, keeping the key, and the data separate. This makes it more difficult for attackers to decrypt the data, as they would need both to be successful.
 
 The **wp-config.php** file is primarily used for this purpose. If this file is not writable (that is the case with some hosting providers), a Must-Use plugin is generated and stored. Optionally, you can force the usage of a Must-Use plugin for each plugin or theme (see Settings below).
 
 ### Hint
 
-Data encryption is not a silver bullet for protecting data. Projects that involve sensitive data should be secured through additional measures in addition to encryption. These include, for example, security plugins. This Composer package is not the only solution for this, but it can help.
+Data encryption is not a silver bullet for protecting data. Projects that involve sensitive data should be secured through additional measures encryption. These include, for example, security plugins. This composer package is not the only solution for this, but it can help.
 
 ## Demo
 
@@ -25,13 +25,13 @@ Data encryption is not a silver bullet for protecting data. Projects that involv
 
 ## Requirements
 
-* _composer_ to install this package.
+* [_composer_]([composer](https://getcomposer.org/)) to install this package.
 * WordPress-plugin or theme to embed them in your project.
 
 ## Installation
 
-1. ``composer require threadi/crypt-for-wordpress``
-2. Add the following codes in your plugin or theme:
+1. `composer require threadi/crypt-for-wordpress`
+2. Add the following code in your plugin or theme:
 
 ```
 $crypt = new \CryptForWordPress\Crypt( __FILE__ );
@@ -117,7 +117,7 @@ $crypt->uninstall();
 
 The key, used to encrypt and decrypt strings, are saved in one place.
 
-We support the following places:
+This package support the following places:
 
 | Place               | Default Order | Description                                                  |
 |---------------------|---------------|--------------------------------------------------------------|
@@ -128,6 +128,8 @@ We support the following places:
 | ServerVariable      |               | Use an $_SERVER variable in your hosting for the key.        |
 | WordPressSalts      |               | Use a WordPress Salts as key.                                |
 | WpConfig            | 1             | Let us save the key in your wp-config.php                    |
+
+You can add more placed as described [here](docs/Places.md).
 
 ## Hooks
 
@@ -141,6 +143,8 @@ Filter: `crypt-for-wordpress-crypt_errors`
 The list of hooks is available in the [Hooks](docs/hooks.md) documentation.
 
 ## Check for WordPress Coding Standards
+
+## For package developers
 
 ### Initialize
 

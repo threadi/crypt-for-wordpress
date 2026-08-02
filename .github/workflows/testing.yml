@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install dependencies
         run: composer install
@@ -21,14 +21,14 @@ jobs:
         run: vendor/bin/phpstan analyse
 
       - name: PHP Compatibility check
-        run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP --runtime-set testVersion 8.1-
+        run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP --runtime-set testVersion 8.2-
 
   build:
     name: Run PHP Unit tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: [ '8.5', '8.4', '8.3', '8.2', '8.1' ]
+        php-version: [ '8.5', '8.4', '8.3', '8.2' ]
     services:
       database:
         image: mysql:latest
