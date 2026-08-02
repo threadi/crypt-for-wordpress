@@ -177,13 +177,14 @@ class Crypt {
 			'CryptForWordPress\Methods\Sodium',
 		);
 
+		$slug = $this->get_slug();
 		/**
 		 * Filter the available crypt-methods.
 		 *
 		 * @since 1.0.0 Available since 1.0.0.
 		 * @param array<int,string> $methods List of methods.
 		 */
-		return apply_filters( $this->get_slug() . '_crypt_methods', $methods );
+		return apply_filters( $slug . '_crypt_methods', $methods );
 	}
 
 	/**
@@ -403,13 +404,14 @@ class Crypt {
 			'CryptForWordPress\Places\WordPressSalts',
 		);
 
+		$slug = $this->get_slug();
 		/**
 		 * Filter the available places.
 		 *
 		 * @since 1.0.0 Available since 1.0.0.
 		 * @param array<int,string> $places List of methods.
 		 */
-		return apply_filters( $this->get_slug() . '_places', $places );
+		return apply_filters( $slug . '_crypt_places', $places );
 	}
 
 	/**
@@ -562,6 +564,7 @@ class Crypt {
 			$data
 		);
 
+		$slug = $this->get_slug();
 		/**
 		 * Run tasks if an error is added to the list.
 		 *
@@ -571,7 +574,7 @@ class Crypt {
 		 * @param string $message The message.
 		 * @param array $data Data for the error.
 		 */
-		do_action( $this->get_slug() . '_error', $code, $message, $data );
+		do_action( $slug . '_crypt_error', $code, $message, $data );
 	}
 
 	/**

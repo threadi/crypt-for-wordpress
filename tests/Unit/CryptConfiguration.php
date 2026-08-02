@@ -220,7 +220,6 @@ class CryptConfiguration extends CryptForWordPressTests {
 
 		// read the protected configuration of the method object.
 		$property = new \ReflectionProperty( $methods[0], 'configuration' );
-		$property->setAccessible( true );
 		$config = (array) $property->getValue( $methods[0] );
 
 		// the given value has been applied ...
@@ -253,7 +252,7 @@ class CryptConfiguration extends CryptForWordPressTests {
 		$this->crypt_obj->set_slug( 'filter-places-' . uniqid( '', true ) );
 
 		add_filter(
-			$this->crypt_obj->get_slug() . '_places',
+			$this->crypt_obj->get_slug() . '_crypt_places',
 			function () {
 				return array( 'CryptForWordPress\Places\Database' );
 			}
@@ -276,7 +275,7 @@ class CryptConfiguration extends CryptForWordPressTests {
 		$this->crypt_obj->set_slug( 'filter-invalid-places-' . uniqid( '', true ) );
 
 		add_filter(
-			$this->crypt_obj->get_slug() . '_places',
+			$this->crypt_obj->get_slug() . '_crypt_places',
 			function () {
 				return array( 'CryptForWordPress\Places\ThisClassDoesNotExist', 'stdClass' );
 			}

@@ -131,6 +131,19 @@ This package support the following places:
 
 You can add more placed as described [here](docs/Places.md).
 
+## Hooks
+
+Several hooks are provided. These always have the slug of the plugin or theme that uses the package as a prefix, followed by the abbreviation "crypt" to distinguish the hook from other hooks.
+
+**Example:**
+
+Plugin: `crypt.for.wordpress-demo`
+Filter: `crypt-for-wordpress-crypt_errors`
+
+The list of hooks is available in the [Hooks](docs/hooks.md) documentation.
+
+## Check for WordPress Coding Standards
+
 ## For package developers
 
 ### Initialize
@@ -156,3 +169,7 @@ Hint: this check runs against the VIP-GO-platform which is not our target for th
 ### Run
 
 `vendor/bin/phpcs --extensions=php --ignore=*/vendor/*,*/tests/* --standard=WordPress-VIP-Go .`
+
+## Generate documentation
+
+`vendor/bin/wp-documentor parse src  --format=markdown --output=docs/hooks.md`
