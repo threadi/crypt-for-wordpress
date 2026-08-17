@@ -460,7 +460,7 @@ class OpenSsl extends Method_Base {
 			if ( strlen( $iv ) !== $iv_length || strlen( $tag ) < 4 || strlen( $tag ) > 16 ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
-					'openssl_decrypt_payload_invalid',
+					'openssl_decrypt_iv_invalid',
 					'IV or AEAD tag of the encrypted string have an unexpected length.',
 					array(
 						'iv_length'  => strlen( $iv ),
@@ -544,6 +544,22 @@ class OpenSsl extends Method_Base {
 				$iv             = substr( $c, 0, $iv_length );
 				$hmac           = substr( $c, $iv_length, $sha2len = 32 );
 				$ciphertext_raw = substr( $c, $iv_length + $sha2len );
+
+				// bail if the decoded payload was too short to even contain a
+				// full IV - openssl_decrypt() would raise a PHP warning otherwise.
+				if ( strlen( $iv ) !== $iv_length ) {
+					// log this error.
+					$this->get_crypt_obj()->add_error(
+						'openssl_decrypt_iv_nonaead_invalid',
+						'Encrypted string is too short to contain a valid IV.',
+						array(
+							'iv_length' => strlen( $iv ),
+						)
+					);
+
+					// do nothing more.
+					return '';
+				}
 			}
 
 			// the current key-separation scheme first, then the decoded

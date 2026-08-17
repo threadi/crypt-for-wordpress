@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.1] - 15.08.2026
+
+### Fixed
+
+- Fixed the missing check for non-aead decryption in OpenSsl to prevent warnings in PHP-log
+
 ## [3.0.0] - 02.08.2026
 
 ### Added
