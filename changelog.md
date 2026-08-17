@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.2] - 17.08.2026
+
+### Fixed
+
+- Fixed a wrong version number in composer.json for release of this package
+
 ## [3.0.1] - 17.08.2026
 
 ### Fixed
