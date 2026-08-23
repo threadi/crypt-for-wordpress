@@ -80,8 +80,7 @@ class Sodium extends Method_Base {
 	 * Initiate this method.
 	 *
 	 * @return void
-	 * @throws SodiumException On Exception through Sodium.
-	 * @throws Exception Could throw exception.
+     * @throws Exception Could throw exception.
 	 */
 	public function init(): void {
 		try {
@@ -485,9 +484,17 @@ class Sodium extends Method_Base {
 		}
 
 		// initiate the method to get the actual hash.
-		$this->init();
+        try {
+            $this->init();
+        } catch ( Exception $e ) {
+            // log this error.
+            $this->get_crypt_obj()->add_error(
+                'sodium_decrypt_error',
+                'Error during initialization of Sodium encryption: ' . wp_kses_post( $e->getMessage() )
+            );
+        }
 
-		// save the hash in the database.
+        // save the hash in the database.
 		update_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', $this->get_hash_value() );
 
 		// run the parent uninstall tasks.

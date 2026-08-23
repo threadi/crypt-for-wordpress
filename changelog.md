@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Log another possible Sodium error
+
 ## [3.0.1] - 15.08.2026
 
 ### Fixed
@@ -15,7 +21,7 @@
 - Added error if no usable place could be found
 - Added support for wp-config.php in the parent directory of the WordPress root (as wp-load.php does)
 - Added multiple more PHP Unit Test to ensure the functionality of this package
-- Added documentation for the hooks this package provides
+- Added a documentation for the hooks this package provides
 
 ### Changed
 
