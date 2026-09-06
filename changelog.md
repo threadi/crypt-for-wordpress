@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Plain as third method, which does not encrypt or decrypt anything
+
 ### Changed
 
 - Log another possible Sodium error
