@@ -379,4 +379,48 @@ class CryptConfiguration extends CryptForWordPressTests {
 
         $this->assertInstanceOf( '\CryptForWordPress\Places\CustomFile', $this->crypt_obj->get_place() );
     }
+
+    /**
+     * Test that the "plain" method is a deliberate escape hatch that must
+     * never be picked up by the automatic detection - even if it is the
+     * only method left standing (e.g. OpenSSL and Sodium both unusable).
+     *
+     * @return void
+     */
+    public function test_plain_method_is_never_selected_automatically(): void {
+        $this->crypt_obj->set_slug( 'plain-auto-' . uniqid( '', true ) );
+        $this->crypt_obj->set_config(
+            array(
+                'force_place' => 'database',
+            )
+        );
+
+        // simulate "no other method is available" by limiting the list to Plain.
+        add_filter(
+            $this->crypt_obj->get_slug() . '_crypt_methods',
+            function () {
+                return array( 'CryptForWordPress\Methods\Plain' );
+            }
+        );
+
+        $this->assertFalse( $this->crypt_obj->get_method() );
+    }
+
+    /**
+     * Test that the "plain" method IS selected once explicitly forced via
+     * "force_method" - the escape hatch has to remain usable on purpose.
+     *
+     * @return void
+     */
+    public function test_plain_method_can_be_forced(): void {
+        $this->crypt_obj->set_slug( 'plain-forced-' . uniqid( '', true ) );
+        $this->crypt_obj->set_config(
+            array(
+                'force_place'  => 'database',
+                'force_method' => 'plain',
+            )
+        );
+
+        $this->assertInstanceOf( '\CryptForWordPress\Methods\Plain', $this->crypt_obj->get_method() );
+    }
 }
