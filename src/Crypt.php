@@ -175,6 +175,7 @@ class Crypt {
 		$methods = array(
 			'CryptForWordPress\Methods\OpenSsl',
 			'CryptForWordPress\Methods\Sodium',
+			'CryptForWordPress\Methods\Plain',
 		);
 
 		$slug = $this->get_slug();
