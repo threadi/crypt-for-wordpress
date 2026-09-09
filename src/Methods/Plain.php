@@ -78,10 +78,10 @@ class Plain extends Method_Base {
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-        // get the configuration.
-        $config = $this->get_crypt_obj()->get_config();
+		// get the configuration.
+		$config = $this->get_crypt_obj()->get_config();
 
-        // return true if plain is explicit forced to be used.
-        return isset( $config['force_method'] ) && 'plain' === $config['force_method'];
+		// return true if plain is explicit forced to be used.
+		return isset( $config['force_method'] ) && 'plain' === $config['force_method'];
 	}
 }
