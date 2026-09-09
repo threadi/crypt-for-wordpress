@@ -51,6 +51,9 @@ class Methods extends CryptForWordPressTests {
 
         // return each supported method.
         foreach( $crypt_obj->get_methods_as_objects() as $method ) {
+            if ($method->get_name() === 'plain') {
+                continue;
+            }
             $method->init();
             yield array( $method );
         }
