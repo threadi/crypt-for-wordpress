@@ -4,7 +4,7 @@
 /.github export-ignore
 /.gitignore export-ignore
 /.editorconfig export-ignore
-/changelod.md export-ignore
+/changelog.md export-ignore
 /bin export-ignore
 /tests export-ignore
 /phpcs.xml.dist export-ignore
