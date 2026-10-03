@@ -62,6 +62,20 @@ class EnvironmentVariable extends Place_Base {
 	}
 
 	/**
+	 * Return whether this place holds the given hash: it never does, as
+	 * nothing can be saved in the environment by this package.
+	 *
+	 * So a key generated here is never taken into use - it would be gone
+	 * with the next request.
+	 *
+	 * @param string $hash The hash that has been saved.
+	 * @return bool
+	 */
+	public function is_saved( string $hash ): bool { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- nothing can be saved here.
+		return false;
+	}
+
+	/**
 	 * Load this places environments before the crypt method is used.
 	 *
 	 * @return void
@@ -106,7 +120,20 @@ class EnvironmentVariable extends Place_Base {
 			return;
 		}
 
+		// get the key.
+		$key = sanitize_text_field( wp_unslash( $_ENV[ $this->configuration['environment_variable'] ] ) );
+
 		// set the variable as constant.
-		define( $this->configuration['environment_variable'], sanitize_text_field( wp_unslash( $_ENV[ $this->configuration['environment_variable'] ] ) ) );
+		if ( ! defined( $this->configuration['environment_variable'] ) ) {
+			define( $this->configuration['environment_variable'], $key );
+		}
+
+		// hand the key over in the constant the method reads it from. The
+		// variable may have any name - without this the key would only be
+		// used if the variable happened to be named like that constant.
+		$constant = $this->get_constant();
+		if ( '' !== $constant && ! defined( $constant ) ) {
+			define( $constant, $key );
+		}
 	}
 }

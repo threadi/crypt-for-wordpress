@@ -88,6 +88,20 @@ class WordPressSalts extends Place_Base {
 	}
 
 	/**
+	 * Return whether this place holds the given hash: it never does, as
+	 * nothing can be saved in the salts by this package.
+	 *
+	 * So a key generated here is never taken into use - it would be gone
+	 * with the next request.
+	 *
+	 * @param string $hash The hash that has been saved.
+	 * @return bool
+	 */
+	public function is_saved( string $hash ): bool { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- nothing can be saved here.
+		return false;
+	}
+
+	/**
 	 * Load this places environments before the crypt method is used.
 	 *
 	 * @return void

@@ -1,5 +1,44 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added an optional context as second parameter of `encrypt()` and `decrypt()`: a value bound to a context cannot be decrypted in another one, e.g. after its encrypted form has been copied into another field
+- Added the errors "key_missing" and "key_changed": if the key of an installation is lost or replaced, this is reported once instead of happening silently. A new key is still generated automatically
+- Added the errors "key_not_saved", "no_key_available", "openssl_unprotected_value", "context_not_supported" and the warning "key_in_inactive_place"
+- Added `encrypt_with_context()` and `decrypt_with_context()` on methods
+- Added `is_saved()`, `get_stored_key()` and `is_network_wide()` on places, and `is_saved_in_place()` on the Crypt object
+
+### Changed
+
+- Breaking only for classes extending `Crypt` and overriding `encrypt()` or `decrypt()`: both got the optional parameter `$context`, which has to be added to the signature. Custom methods - extending `Method_Base` or one of the included methods - keep working unchanged
+- A key that already exists is used even if no place is usable anymore, e.g. if the wp-config.php holding it cannot be written to
+- OpenSSL generates a key with the default settings if 'hash_algorithm' or 'hash_type' are unknown, instead of working without a key. The error is still reported
+- A key the place derives itself (WordPress salts) wins over a key an uninstallation left in the database
+- The Must-Use plugin and the custom file keep the keys of other methods when the key of one method is saved
+- OpenSSL uses a key, which is not in the format this package generates, as passphrase. This is the case for a self-chosen key from an environment or server variable. No error is reported for it anymore
+- OpenSSL only accepts the full AEAD tag of 16 bytes when decrypting, instead of any length from 4 to 16 bytes. Every value this package has written uses the full tag
+- A missing key is searched in the other supported places before a new one is generated, not only in the active one
+- A new key is only used once it really has been saved in its place. Otherwise, nothing is encrypted
+- The key an uninstallation left in the database is only removed there once the place really holds it
+- The wp-config.php is only used as place if its directory is writable as well, otherwise the next place is used
+
+### Fixed
+
+- Fixed OpenSSL encrypting with an empty key - readable by anybody - whenever the stored key was not in the format this package generates: with a self-chosen key from an environment or server variable, or after changing 'hash_type' from "hash_pbkdf2" to "hash". Values written in this state stay readable and are reported as "openssl_unprotected_value" when decrypted. They are protected once they are encrypted again
+- Fixed OpenSSL encrypting with an empty key if no key could be generated, e.g. with an unknown hash algorithm. Values written in this state stay readable and are reported as "openssl_unprotected_value" as well
+- Fixed the key from an environment or server variable only being used if the variable was named like the constant of the method. With any other name a new key was generated with every request, and nothing could be decrypted afterward
+- Fixed the silent generation of a new key although this installation already had one in another place, e.g. after the active place changed from the database to wp-config.php - every value encrypted before was unreadable afterward
+- Fixed the generation of a new key with every request if it could not be saved
+- Fixed `uninstall()` deleting the key of the database place instead of keeping it, if nothing had been encrypted or decrypted during the same request, or if another method has been uninstalled first
+- Fixed a second Crypt object of the same plugin failing with Sodium during the request in which the key has been generated
+- Fixed an unauthenticated IV in OpenSSL with ciphers without AEAD (e.g. AES-256-CBC): the first block of a value could be changed without being noticed. New values use a format which covers the IV, existing values stay readable and are protected once they are saved again
+- Fixed OpenSSL decrypting values of ciphers without AEAD before verifying them, which reported invalid padding differently from an invalid HMAC
+- Fixed the file lock for wp-config.php, which has never been taken as its lock file was expected to exist beforehand
+- Fixed a moment without any wp-config.php while it is rewritten: it is now replaced atomically on local filesystems
+- Fixed wrong exclusion of changelog.md from composer package
+
 ## [3.1.0] - 09.09.2026
 
 ### Added

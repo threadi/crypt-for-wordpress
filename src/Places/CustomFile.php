@@ -107,10 +107,10 @@ class CustomFile extends Place_Base {
 		// get WP Filesystem-handler.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
-		// prepare the content.
-		$custom_file_php_content = "<?php\n";
+		// prepare the content - keeping the keys of other methods the file already holds.
+		$custom_file_php_content = "<?php\n" . $this->get_other_define_lines( $secured_path );
 		// add the constant.
-		$define                   = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
+		$define                   = $this->get_define_statement( $hash ) . ' // Added by ' . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
 		$custom_file_php_content .= $define;
 
 		// save the changed wp-config.php.
@@ -135,6 +135,52 @@ class CustomFile extends Place_Base {
 				'Could not set file permissions. Possible write permission error.'
 			);
 		}
+	}
+
+	/**
+	 * Return the configured path, or an empty string if it is missing or not
+	 * a plain local path.
+	 *
+	 * @return string
+	 */
+	private function get_local_path(): string {
+		// bail if no usable path is given.
+		if ( empty( $this->configuration['custom_file_path'] ) || ! is_string( $this->configuration['custom_file_path'] ) ) {
+			return '';
+		}
+
+		// secure the given path.
+		$secured_path = wp_normalize_path( $this->configuration['custom_file_path'] );
+
+		// bail if the path uses a stream wrapper.
+		if ( preg_match( '#^[a-z][a-z0-9+\-.]*:#i', $secured_path ) ) {
+			return '';
+		}
+
+		return $secured_path;
+	}
+
+	/**
+	 * Return whether the custom file holds the given hash.
+	 *
+	 * @param string $hash The hash that has been saved.
+	 * @return bool
+	 */
+	public function is_saved( string $hash ): bool {
+		$path = $this->get_local_path();
+
+		return '' !== $path && $this->file_holds_hash( $path, $hash );
+	}
+
+	/**
+	 * Return the key the custom file holds, or an empty string.
+	 *
+	 * @return string
+	 */
+	public function get_stored_key(): string {
+		$path = $this->get_local_path();
+
+		return '' !== $path ? $this->read_hash_from_file( $path ) : '';
 	}
 
 	/**

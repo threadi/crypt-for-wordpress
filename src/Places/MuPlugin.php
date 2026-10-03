@@ -88,9 +88,6 @@ class MuPlugin extends Place_Base {
 		// get WP Filesystem-handler.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
-		// create a custom must-use-plugin instead.
-		$file_content = '<?php ' . $this->get_php_header() . "\ndefine( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
-
 		// create the "must-use"-directory if it is missing.
 		if ( ! $wp_filesystem->exists( WPMU_PLUGIN_DIR ) ) {
 			$wp_filesystem->mkdir( WPMU_PLUGIN_DIR );
@@ -98,6 +95,10 @@ class MuPlugin extends Place_Base {
 
 		// define the path.
 		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename();
+
+		// create a custom must-use-plugin instead - keeping the keys of other
+		// methods the file already holds.
+		$file_content = '<?php ' . $this->get_php_header() . "\n" . $this->get_other_define_lines( $file_path ) . $this->get_define_statement( $hash ) . ' // Added by ' . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
 
 		// save the file.
 		if ( ! $wp_filesystem->put_contents( $file_path, $file_content ) ) {
@@ -121,6 +122,21 @@ class MuPlugin extends Place_Base {
 				'Could not set file permissions. Possible write permission error.'
 			);
 		}
+	}
+
+	/**
+	 * Return whether the generated "must-use"-plugin holds the given hash.
+	 *
+	 * @param string $hash The hash that has been saved.
+	 * @return bool
+	 */
+	public function is_saved( string $hash ): bool {
+		// bail if the "must-use"-plugin-directory is not set.
+		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
+			return false;
+		}
+
+		return $this->file_holds_hash( WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->get_mu_plugin_filename(), $hash );
 	}
 
 	/**

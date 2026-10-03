@@ -73,15 +73,16 @@ class Crypt {
 
 		// get the place object.
 		$place_obj = $this->get_place();
+
+		// a place is only needed to save a key. If none is usable, but the key
+		// is there - e.g. defined in a wp-config.php which cannot be written
+		// to - or the method needs none, everything still works. Report it
+		// all the same, as a new key could not be saved.
 		if ( ! $place_obj instanceof Place_Base ) {
-			// log this error.
 			$this->add_error(
 				'save_place_not_available',
 				'Could not find any place to save the key for encryption.'
 			);
-
-			// do nothing more.
-			return false;
 		}
 
 		// loop through the objects to check, which one we could use.
@@ -91,16 +92,23 @@ class Crypt {
 				continue;
 			}
 
-			// tell the place, which constant this method expects, then let it
-			// load whatever it holds into exactly that constant.
-			$place_obj->set_constant( $obj->get_constant() );
-			$place_obj->load();
+			if ( $place_obj instanceof Place_Base ) {
+				// tell the place, which constant this method expects, then let it
+				// load whatever it holds into exactly that constant.
+				$place_obj->set_constant( $obj->get_constant() );
+				$place_obj->load();
 
-			// set the used place.
-			$obj->set_place( $place_obj );
+				// set the used place.
+				$obj->set_place( $place_obj );
+			}
 
 			// initiate the method.
 			$obj->init();
+
+			// bail if there is no place, and the method cannot do anything without one.
+			if ( ! $place_obj instanceof Place_Base && ! $obj->is_usable_without_place() ) {
+				continue;
+			}
 
 			// set method as our method to use.
 			$this->method = $obj;
@@ -113,13 +121,69 @@ class Crypt {
 	}
 
 	/**
+	 * Return the keys the places hold, without loading them.
+	 *
+	 * The active place is simply the first usable one. Which one that is can
+	 * change over time - file permissions get fixed, a configuration changes.
+	 * A key saved earlier in another place must still be found then, instead
+	 * of being replaced by a new one.
+	 *
+	 * This is only a lookup: nothing is defined, saved or reported here. The
+	 * method decides whether one of these keys is usable for it.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $constant The constant the key would be defined as.
+	 * @param bool   $include_active_place False to skip the active place, as it has been asked already.
+	 *
+	 * @return array<int,array{place:Place_Base,key:string}>
+	 */
+	public function get_stored_keys( string $constant, bool $include_active_place = false ): array {
+		// get the name of the active place.
+		$active_place      = $this->get_place();
+		$active_place_name = $active_place instanceof Place_Base ? $active_place->get_name() : '';
+
+		// collect the keys of the places.
+		$keys = array();
+		foreach ( $this->get_place_objects( true ) as $place_obj ) {
+			// bail if this is the active place, and it should be skipped.
+			if ( ! $include_active_place && $place_obj->get_name() === $active_place_name ) {
+				continue;
+			}
+
+			// ask the place for a key it holds.
+			$place_obj->set_constant( $constant );
+			$key = $place_obj->get_stored_key();
+
+			// bail if this place does not hold a key.
+			if ( '' === $key ) {
+				continue;
+			}
+
+			$keys[] = array(
+				'place' => $place_obj,
+				'key'   => $key,
+			);
+		}
+
+		return $keys;
+	}
+
+	/**
 	 * Return an encrypted string.
 	 *
+	 * The optional context binds the encrypted value to what it belongs to -
+	 * e.g. the name of the field it is saved in. It is not encrypted and not
+	 * part of the result, but the value can only be decrypted with the very
+	 * same context. An encrypted value copied into another field does not
+	 * decrypt there.
+	 *
 	 * @param string $plain_text String to encrypt.
+	 * @param string $context    Optional. What the value belongs to.
 	 *
 	 * @return string
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( string $plain_text, string $context = '' ): string {
 		// get the active method.
 		$method_obj = $this->get_method();
 
@@ -136,17 +200,18 @@ class Crypt {
 		}
 
 		// encrypt the string with the detected method.
-		return $method_obj->encrypt( $plain_text );
+		return '' === $context ? $method_obj->encrypt( $plain_text ) : $method_obj->encrypt_with_context( $plain_text, $context );
 	}
 
 	/**
 	 * Return the decrypted string.
 	 *
 	 * @param string $encrypted_text Text to decrypt.
+	 * @param string $context        Optional. The context the value has been encrypted with.
 	 *
 	 * @return string
 	 */
-	public function decrypt( string $encrypted_text ): string {
+	public function decrypt( string $encrypted_text, string $context = '' ): string {
 		// get the active method.
 		$method_obj = $this->get_method();
 
@@ -163,7 +228,7 @@ class Crypt {
 		}
 
 		// decrypt the string with the detected method.
-		return $method_obj->decrypt( $encrypted_text );
+		return '' === $context ? $method_obj->decrypt( $encrypted_text ) : $method_obj->decrypt_with_context( $encrypted_text, $context );
 	}
 
 	/**
@@ -196,6 +261,17 @@ class Crypt {
 	 * @return array<int,Method_Base>
 	 */
 	public function get_methods_as_objects(): array {
+		return $this->get_method_objects( false );
+	}
+
+	/**
+	 * Return the list of methods as objects.
+	 *
+	 * @param bool $ignore_forced_method True to also return the methods a configured "force_method" hides.
+	 *
+	 * @return array<int,Method_Base>
+	 */
+	private function get_method_objects( bool $ignore_forced_method ): array {
 		// bail if this is not a WordPress environment.
 		if ( ! defined( 'ABSPATH' ) ) {
 			return array();
@@ -220,7 +296,7 @@ class Crypt {
 			}
 
 			// bail if a method is forced and this is not the forced method.
-			if ( ! empty( $this->configuration['force_method'] ) && $obj->get_name() !== $this->configuration['force_method'] ) { // @phpstan-ignore notIdentical.alwaysTrue
+			if ( ! $ignore_forced_method && ! empty( $this->configuration['force_method'] ) && $obj->get_name() !== $this->configuration['force_method'] ) { // @phpstan-ignore notIdentical.alwaysTrue
 				continue;
 			}
 
@@ -248,8 +324,25 @@ class Crypt {
 			$place_obj->load();
 		}
 
+		// get the methods, and tell them which place is in use. All of them:
+		// the places are cleaned up completely, so the key of every method
+		// has to be put aside - not only of one that is forced right now.
+		$methods = $this->get_method_objects( true );
+		if ( $place_obj instanceof Place_Base ) {
+			foreach ( $methods as $obj ) {
+				$obj->set_place( $place_obj );
+			}
+		}
+
+		// let every method put its key aside first. The places are shared by
+		// the methods: the first one cleaning them up would otherwise remove
+		// the keys of the others with it.
+		foreach ( $methods as $obj ) {
+			$obj->keep_key_for_uninstall();
+		}
+
 		// check the methods for their uninstallation tasks.
-		foreach ( $this->get_methods_as_objects() as $obj ) {
+		foreach ( $methods as $obj ) {
 			$obj->uninstall();
 		}
 	}
@@ -423,6 +516,17 @@ class Crypt {
 	 * @return array<int,Place_Base>
 	 */
 	public function get_places_as_objects(): array {
+		return $this->get_place_objects( false );
+	}
+
+	/**
+	 * Return the list of places as objects.
+	 *
+	 * @param bool $ignore_forced_place True to also return the places a configured "force_place" hides.
+	 *
+	 * @return array<int,Place_Base>
+	 */
+	private function get_place_objects( bool $ignore_forced_place ): array {
 		// bail if this is not a WordPress environment.
 		if ( ! defined( 'ABSPATH' ) ) {
 			return array();
@@ -447,7 +551,7 @@ class Crypt {
 			}
 
 			// bail if a method is forced and this is not the forced method.
-			if ( ! empty( $this->configuration['force_place'] ) && $obj->get_name() !== $this->configuration['force_place'] ) { // @phpstan-ignore notIdentical.alwaysTrue
+			if ( ! $ignore_forced_place && ! empty( $this->configuration['force_place'] ) && $obj->get_name() !== $this->configuration['force_place'] ) { // @phpstan-ignore notIdentical.alwaysTrue
 				continue;
 			}
 
@@ -513,6 +617,34 @@ class Crypt {
 
 		// save the hash in the place.
 		$place_obj->save( $hash );
+	}
+
+	/**
+	 * Return whether the configured place holds the given hash in the constant.
+	 *
+	 * Used right after save_in_place(): a write is not trusted until the
+	 * place confirms it.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $constant The constant to use.
+	 * @param string $hash The hash to check.
+	 * @return bool
+	 */
+	public function is_saved_in_place( string $constant, string $hash ): bool {
+		// get the place to use.
+		$place_obj = $this->get_place();
+
+		// bail if no place could be loaded.
+		if ( ! $place_obj instanceof Place_Base ) {
+			return false;
+		}
+
+		// Set configuration.
+		$place_obj->set_constant( $constant );
+
+		// ask the place.
+		return $place_obj->is_saved( $hash );
 	}
 
 	/**

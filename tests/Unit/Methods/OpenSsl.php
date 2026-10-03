@@ -131,13 +131,15 @@ class OpenSsl extends CryptForWordPressTests {
 		$encrypted  = $method->encrypt( $plain_text );
 		$this->assertNotEmpty( $encrypted );
 
+		// format marker, IV, HMAC + ciphertext.
 		$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
-		$this->assertCount( 2, $parts );
+		$this->assertCount( 3, $parts );
+		$this->assertSame( 'v2', $parts[0] );
 
-		// flip the first byte of the HMAC (the first 32 bytes of the second part).
-		$hmac_and_ciphertext     = (string) base64_decode( $parts[1], true );
+		// flip the first byte of the HMAC (the first 32 bytes of the last part).
+		$hmac_and_ciphertext     = (string) base64_decode( $parts[2], true );
 		$hmac_and_ciphertext[0]  = chr( ord( $hmac_and_ciphertext[0] ) ^ 0xFF );
-		$parts[1]                = base64_encode( $hmac_and_ciphertext );
+		$parts[2]                = base64_encode( $hmac_and_ciphertext );
 		$tampered                = base64_encode( implode( ':', $parts ) );
 
 		$decrypted = $method->decrypt( $tampered );
@@ -215,5 +217,179 @@ class OpenSsl extends CryptForWordPressTests {
 		$state_a_value = base64_encode( base64_encode( $iv ) . ':' . base64_encode( $hmac . $ciphertext_raw ) );
 
 		$this->assertSame( $plain_text, $method->decrypt( $state_a_value ) );
+	}
+
+	/**
+	 * Test that changing the IV of a non-AEAD (e.g. CBC) encrypted value is
+	 * detected. With CBC the IV decides what the first block decrypts to: if
+	 * the HMAC does not cover it, the first 16 bytes of the plaintext can be
+	 * rewritten at will without knowing the key.
+	 *
+	 * @return void
+	 */
+	public function test_tampered_iv_fails_to_decrypt_non_aead(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-iv', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+
+		$encrypted = $method->encrypt( 'role=user;token=abcdef' );
+		$this->assertNotEmpty( $encrypted );
+
+		$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
+		$this->assertCount( 3, $parts );
+
+		// turn "role=user;" into "role=admin" by changing nothing but the IV.
+		$iv   = (string) base64_decode( $parts[1], true );
+		$from = 'role=user;';
+		$to   = 'role=admin';
+		for ( $i = 0, $length = strlen( $from ); $i < $length; $i++ ) {
+			$iv[ $i ] = $iv[ $i ] ^ $from[ $i ] ^ $to[ $i ];
+		}
+		$parts[1] = base64_encode( $iv );
+		$tampered = base64_encode( implode( ':', $parts ) );
+
+		$this->assertSame( '', $method->decrypt( $tampered ) );
+		$this->assertTrue( $crypt_obj->has_errors() );
+		$this->assertContains( 'openssl_decrypt_hmac_error', $crypt_obj->get_errors()->get_error_codes() );
+
+		// the untouched value is still fine.
+		$this->assertSame( 'role=user;token=abcdef', $method->decrypt( $encrypted ) );
+	}
+
+	/**
+	 * Test that a truncated or malformed non-AEAD value in the current
+	 * format is rejected with an error instead of a PHP warning.
+	 *
+	 * @return void
+	 */
+	public function test_malformed_non_aead_value_is_rejected(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-malformed-cbc', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+
+		$malformed = array(
+			'IV too short'       => base64_encode( 'v2:' . base64_encode( 'short' ) . ':' . base64_encode( str_repeat( 'x', 64 ) ) ),
+			'no ciphertext'      => base64_encode( 'v2:' . base64_encode( str_repeat( 'i', 16 ) ) . ':' . base64_encode( str_repeat( 'x', 32 ) ) ),
+			'parts not base64'   => base64_encode( 'v2:!!!:???' ),
+		);
+
+		foreach ( $malformed as $name => $value ) {
+			$this->assertSame( '', $method->decrypt( $value ), $name );
+		}
+
+		$this->assertContains( 'openssl_decrypt_encrypted_parts_missing', $crypt_obj->get_errors()->get_error_codes() );
+	}
+
+	/**
+	 * Test that a manipulated value in the format of older versions always
+	 * fails for the same reason: its HMAC. If it were decrypted first, the
+	 * reported error would tell valid from invalid padding - enough to read
+	 * a value without the key.
+	 *
+	 * @return void
+	 */
+	public function test_legacy_non_aead_value_is_verified_before_it_is_decrypted(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-legacy-verify', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+
+		$master   = (string) hex2bin( $method->get_hash() );
+		$enc_key  = hash_hkdf( 'sha256', $master, 32, 'encryption' );
+		$hmac_key = hash_hkdf( 'sha256', $master, 32, 'authentication' );
+		$iv       = random_bytes( 16 );
+		$raw      = (string) openssl_encrypt( 'an old value, longer than one block', 'AES-256-CBC', $enc_key, OPENSSL_RAW_DATA, $iv );
+		$hmac     = hash_hmac( 'sha256', $raw, $hmac_key, true );
+
+		// the untouched value is readable.
+		$this->assertSame( 'an old value, longer than one block', $method->decrypt( base64_encode( base64_encode( $iv ) . ':' . base64_encode( $hmac . $raw ) ) ) );
+
+		// change the last byte of the second last block in every possible
+		// way: some of them result in a valid padding, most of them do not.
+		for ( $i = 1; $i < 256; $i++ ) {
+			$tampered                        = $raw;
+			$tampered[ strlen( $raw ) - 17 ] = $tampered[ strlen( $raw ) - 17 ] ^ chr( $i );
+
+			$crypt_obj->clear_errors();
+			$this->assertSame( '', $method->decrypt( base64_encode( base64_encode( $iv ) . ':' . base64_encode( $hmac . $tampered ) ) ) );
+			$this->assertSame( array( 'openssl_decrypt_hmac_error' ), $crypt_obj->get_errors()->get_error_codes(), 'Byte: ' . $i );
+		}
+	}
+
+	/**
+	 * Test that the current format does not share its keys with the format
+	 * of older versions. With shared keys the bytes its HMAC covers could be
+	 * presented as a ciphertext of the old format, with the HMAC still
+	 * matching.
+	 *
+	 * @return void
+	 */
+	public function test_current_non_aead_format_has_keys_of_its_own(): void {
+		list( , $method ) = $this->get_initialized_method( 'openssl-own-keys', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+
+		$encrypted = $method->encrypt( 'sk_live_this-is-the-secret' );
+
+		list( , $iv_encoded, $payload_encoded ) = explode( ':', (string) base64_decode( $encrypted, true ) );
+
+		$payload = (string) base64_decode( $payload_encoded, true );
+		$hmac    = substr( $payload, 0, 32 );
+
+		// the HMAC is not the one the keys of the old format would produce.
+		$master   = (string) hex2bin( $method->get_hash() );
+		$hmac_key = hash_hkdf( 'sha256', $master, 32, 'authentication' );
+		$covered  = 'v2' . pack( 'J', 0 ) . (string) base64_decode( $iv_encoded, true ) . substr( $payload, 32 );
+
+		$this->assertFalse( hash_equals( hash_hmac( 'sha256', $covered, $hmac_key, true ), $hmac ) );
+
+		// so re-wrapping it in the old format fails.
+		$forged = base64_encode( base64_encode( str_repeat( "\0", 16 ) ) . ':' . base64_encode( $hmac . $covered ) );
+		$this->assertSame( '', $method->decrypt( $forged ) );
+	}
+
+	/**
+	 * Test that only the full, 16 byte AEAD tag is accepted. OpenSSL itself
+	 * accepts shorter tags too: a value whose tag has been cut down to 4
+	 * bytes would still decrypt - and a 4 byte tag can be forged by trying.
+	 *
+	 * @return void
+	 */
+	public function test_truncated_tag_is_rejected(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-short-tag' );
+
+		$encrypted = $method->encrypt( 'Hallo World, this must not leak.' );
+		$parts     = explode( ':', (string) base64_decode( $encrypted, true ) );
+		$tag       = (string) base64_decode( $parts[1], true );
+
+		// encrypt() writes the full tag.
+		$this->assertSame( 16, strlen( $tag ) );
+
+		foreach ( array( 15, 12, 8, 4 ) as $length ) {
+			$parts[1]  = base64_encode( substr( $tag, 0, $length ) );
+			$truncated = base64_encode( implode( ':', $parts ) );
+
+			$this->assertSame( '', $method->decrypt( $truncated ), 'Tag length: ' . $length );
+		}
+
+		$this->assertContains( 'openssl_decrypt_iv_invalid', $crypt_obj->get_errors()->get_error_codes() );
+
+		// a tag that is too long is rejected as well.
+		$parts[1] = base64_encode( $tag . 'x' );
+		$this->assertSame( '', $method->decrypt( base64_encode( implode( ':', $parts ) ) ) );
+	}
+
+	/**
+	 * Test the same for the second AEAD cipher this method supports.
+	 *
+	 * @return void
+	 */
+	public function test_truncated_tag_is_rejected_with_chacha20_poly1305(): void {
+		if ( ! in_array( 'chacha20-poly1305', openssl_get_cipher_methods(), true ) ) {
+			$this->markTestSkipped( 'chacha20-poly1305 is not available on this hosting.' );
+		}
+
+		list( , $method ) = $this->get_initialized_method( 'openssl-short-tag-chacha', array( 'cipher_algorithm' => 'chacha20-poly1305' ) );
+
+		$encrypted = $method->encrypt( 'Hallo World, this must not leak.' );
+		$this->assertSame( 'Hallo World, this must not leak.', $method->decrypt( $encrypted ) );
+
+		$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
+		$tag   = (string) base64_decode( $parts[1], true );
+		$this->assertSame( 16, strlen( $tag ) );
+
+		$parts[1] = base64_encode( substr( $tag, 0, 8 ) );
+		$this->assertSame( '', $method->decrypt( base64_encode( implode( ':', $parts ) ) ) );
 	}
 }
