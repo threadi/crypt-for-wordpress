@@ -57,7 +57,7 @@ class Plain extends Method_Base {
 	 *
 	 * @return string
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text ): string {
 		return $plain_text;
 	}
 
@@ -70,6 +70,33 @@ class Plain extends Method_Base {
 	 */
 	public function decrypt( string $encrypted_text ): string {
 		return $encrypted_text;
+	}
+
+	/**
+	 * "Encrypt" a given string for a context: nothing is encrypted by this
+	 * method, so there is nothing a context could be bound to.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $plain_text The plain string.
+	 * @param string $context    Ignored.
+	 *
+	 * @return string
+	 */
+	public function encrypt_with_context( #[\SensitiveParameter] string $plain_text, string $context ): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassAfterLastUsed -- nothing is encrypted.
+		return $this->encrypt( $plain_text );
+	}
+
+	/**
+	 * "Decrypt" a given string of a context.
+	 *
+	 * @param string $encrypted_text The encrypted string.
+	 * @param string $context        Ignored.
+	 *
+	 * @return string
+	 */
+	public function decrypt_with_context( string $encrypted_text, string $context ): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassAfterLastUsed -- nothing is encrypted.
+		return $this->decrypt( $encrypted_text );
 	}
 
 	/**

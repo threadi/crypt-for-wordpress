@@ -19,6 +19,7 @@ namespace CryptForWordPress\Places;
 defined( 'ABSPATH' ) || exit;
 
 use CryptForWordPress\Crypt;
+use CryptForWordPress\Method_Base;
 use CryptForWordPress\Place_Base;
 
 /**
@@ -83,6 +84,9 @@ class Database extends Place_Base {
 		// set the constant.
 		if ( ! empty( $hash ) && ! empty( $constant ) && ! defined( $constant ) ) {
 			define( $constant, $hash );
+
+			// this key belongs to the current site of a multisite network only.
+			Method_Base::register_per_site_constant( $constant );
 		}
 
 		// log a warning.
@@ -98,8 +102,45 @@ class Database extends Place_Base {
 	 * @param string $hash The hash to save.
 	 * @return void
 	 */
-	public function save( string $hash ): void {
+	public function save( #[\SensitiveParameter] string $hash ): void {
 		update_option( $this->get_option_name(), $hash, true );
+	}
+
+	/**
+	 * Return whether the database holds the given hash.
+	 *
+	 * @param string $hash The hash that has been saved.
+	 * @return bool
+	 */
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
+		return '' !== $hash && get_option( $this->get_option_name(), '' ) === $hash;
+	}
+
+	/**
+	 * Return the key the database holds, or an empty string.
+	 *
+	 * @return string
+	 */
+	public function get_stored_key(): string {
+		// bail if the usage of the database is blocked.
+		if ( ! $this->is_usable() ) {
+			return '';
+		}
+
+		// get the hash from the database.
+		$hash = get_option( $this->get_option_name(), '' );
+
+		return is_string( $hash ) ? $hash : '';
+	}
+
+	/**
+	 * Return whether the key of this place is the same for every site of a
+	 * multisite network: it is not, every site has its own options.
+	 *
+	 * @return bool
+	 */
+	public function is_network_wide(): bool {
+		return false;
 	}
 
 	/**

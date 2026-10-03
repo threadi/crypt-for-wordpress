@@ -79,6 +79,12 @@ class Sodium extends Method_Base {
 	/**
 	 * Initiate this method.
 	 *
+	 * Looks for the key in this order: the constant (set by the place or by
+	 * WordPress itself), the option an uninstallation left behind, a key the
+	 * place derives itself, a place which is not the active one anymore.
+	 * Only if none of them has a key, a new one is generated - and this is
+	 * reported, if this installation had a key before.
+	 *
 	 * @return void
 	 * @throws SodiumException On Exception through Sodium.
 	 * @throws Exception Could throw exception.
@@ -90,66 +96,101 @@ class Sodium extends Method_Base {
 				$this->set_hash( sodium_base642bin( $this->get_hash_value_from_constant(), $this->get_coding_id() ) ); // @phpstan-ignore constant.notFound
 			}
 
-			// bail if hash is set.
+			// bail if hash is set: use it.
 			if ( ! empty( $this->get_hash() ) ) {
+				$this->confirm_key();
+				return;
+			}
+
+			// let the place derive the key, if it can.
+			$raw_key = $this->get_derived_key();
+			if ( '' !== $raw_key ) {
+				// this method works on raw key bytes, so no encoding is needed.
+				$this->set_hash( $raw_key );
+
+				// a derived key is recreated on every request: it must not be
+				// written into a place. It is the key of this place, so it also
+				// wins over a key an uninstallation may have left in the database
+				// - which this place could never take over.
+				$this->confirm_key();
 				return;
 			}
 
 			// get hash from the old db entry.
-			$this->set_hash( sodium_base642bin( get_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', '' ), $this->get_coding_id() ) );
+			$option_name = $this->get_crypt_obj()->get_slug() . '_sodium_hash';
+			$option_hash = get_option( $option_name, '' );
+			$this->set_hash( sodium_base642bin( is_string( $option_hash ) ? $option_hash : '', $this->get_coding_id() ) );
 
-			// let the place derive the key, if it can.
-			if ( empty( $this->get_hash() ) ) {
-				$raw_key = $this->get_derived_key();
+			// move it into its place.
+			if ( ! empty( $this->get_hash() ) ) {
+				$this->confirm_key();
 
-				if ( '' !== $raw_key ) {
-					// this method works on raw key bytes, so no encoding is needed.
-					$this->set_hash( $raw_key );
-
-					// a derived key is recreated on every request: it must not be
-					// written into a place, and there is no old option to clean up.
-					return;
-				}
-			}
-
-			// if no hash is set, create one.
-			if ( empty( $this->get_hash() ) ) {
-				// get the hash depending on the setting.
-				switch ( $this->configuration['hash_type'] ) {
-					case 'sodium_crypto_secretbox_keygen':
-						$hash = sodium_crypto_secretbox_keygen();
-						break;
-					case 'sodium_crypto_auth_keygen':
-						$hash = sodium_crypto_auth_keygen();
-						break;
-					case 'sodium_crypto_generichash_keygen':
-						$hash = sodium_crypto_generichash_keygen();
-						break;
-					case 'sodium_crypto_kdf_keygen':
-						$hash = sodium_crypto_kdf_keygen();
-						break;
-					case 'random_bytes':
-						$hash = random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
-						break;
-					default:
-						$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
-						break;
+				// delete the old option field only if the place really holds the
+				// key now - otherwise the option stays the only copy of it.
+				if ( $this->persist_key() ) {
+					delete_option( $option_name );
 				}
 
-				// set the hash.
-				$this->set_hash( $hash );
+				// run the constant for this process.
+				$this->run_constant();
+
+				// do nothing more.
+				return;
 			}
 
-			// save the hash in its place.
-			$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
+			// the key may still be in a place, which has been the active one
+			// before (e.g., wp-config.php became writable after the key had
+			// been saved in the database).
+			$this->set_hash( sodium_base642bin( $this->get_stored_key_from_inactive_places(), $this->get_coding_id() ) );
+			if ( '' !== $this->get_hash() ) {
+				// use it from there.
+				$this->confirm_key();
+				$this->run_constant();
 
-			// delete the old option field.
-			delete_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash' );
+				// do nothing more.
+				return;
+			}
+
+			// if this installation had a key before, it is gone: never replace it silently.
+			$this->report_missing_key();
+
+			// no key has ever been used, create one depending on the setting.
+			switch ( $this->configuration['hash_type'] ) {
+				case 'sodium_crypto_secretbox_keygen':
+					$hash = sodium_crypto_secretbox_keygen();
+					break;
+				case 'sodium_crypto_auth_keygen':
+					$hash = sodium_crypto_auth_keygen();
+					break;
+				case 'sodium_crypto_generichash_keygen':
+					$hash = sodium_crypto_generichash_keygen();
+					break;
+				case 'sodium_crypto_kdf_keygen':
+					$hash = sodium_crypto_kdf_keygen();
+					break;
+				case 'random_bytes':
+					$hash = random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
+					break;
+				default:
+					$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
+					break;
+			}
+
+			// set the hash.
+			$this->set_hash( $hash );
+
+			// bail if the new key could not be saved in its place.
+			if ( ! $this->store_new_key() ) {
+				return;
+			}
 
 			// run the constant for this process.
 			$this->run_constant();
 
 		} catch ( Exception $e ) {
+			// never work with a key of an initialization that failed halfway.
+			$this->set_hash( '' );
+
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'sodium_decrypt_error',
@@ -220,27 +261,28 @@ class Sodium extends Method_Base {
 	 * @param int    $algorithm One of the self::ALGO_* constants.
 	 * @param string $plain_text The plain string.
 	 * @param string $nonce The nonce to use (already correctly sized).
+	 * @param string $context The context, authenticated as additional data.
 	 *
 	 * @return string|false The ciphertext, or false if the algorithm is unavailable.
 	 * @throws SodiumException Could throw a sodium exception.
 	 */
-	private function encrypt_with( int $algorithm, string $plain_text, string $nonce ): false|string {
+	private function encrypt_with( int $algorithm, #[\SensitiveParameter] string $plain_text, string $nonce, string $context ): false|string {
 		switch ( $algorithm ) {
 			case self::ALGO_AEGIS256:
 				return function_exists( 'sodium_crypto_aead_aegis256_encrypt' )
-					? sodium_crypto_aead_aegis256_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					? sodium_crypto_aead_aegis256_encrypt( $plain_text, $context, $nonce, $this->get_hash() )
 					: false;
 			case self::ALGO_AES256GCM:
 				return function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' )
-					? sodium_crypto_aead_aes256gcm_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					? sodium_crypto_aead_aes256gcm_encrypt( $plain_text, $context, $nonce, $this->get_hash() )
 					: false;
 			case self::ALGO_XCHACHA20POLY1305:
 				return function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' )
-					? sodium_crypto_aead_xchacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					? sodium_crypto_aead_xchacha20poly1305_ietf_encrypt( $plain_text, $context, $nonce, $this->get_hash() )
 					: false;
 			case self::ALGO_CHACHA20POLY1305:
 				return function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_encrypt' )
-					? sodium_crypto_aead_chacha20poly1305_ietf_encrypt( $plain_text, '', $nonce, $this->get_hash() )
+					? sodium_crypto_aead_chacha20poly1305_ietf_encrypt( $plain_text, $context, $nonce, $this->get_hash() )
 					: false;
 			default:
 				return false;
@@ -253,32 +295,33 @@ class Sodium extends Method_Base {
 	 * @param int    $algorithm One of the self::ALGO_* constants.
 	 * @param string $ciphertext The ciphertext.
 	 * @param string $nonce The nonce (already correctly sized for this algorithm).
+	 * @param string $context The context, authenticated as additional data.
 	 *
 	 * @return string|false The plaintext, or false if it could not be decrypted.
 	 * @throws SodiumException|RuntimeException Could throw exception.
 	 */
-	private function decrypt_with( int $algorithm, string $ciphertext, string $nonce ): false|string {
+	private function decrypt_with( int $algorithm, string $ciphertext, string $nonce, string $context ): false|string {
 		switch ( $algorithm ) {
 			case self::ALGO_AEGIS256:
 				if ( ! function_exists( 'sodium_crypto_aead_aegis256_decrypt' ) ) {
 					throw new RuntimeException( 'AEGIS-256 is not supported by this server (requires a libsodium upgrade), but it cannot decrypt this value.' );
 				}
-				return sodium_crypto_aead_aegis256_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+				return sodium_crypto_aead_aegis256_decrypt( $ciphertext, $context, $nonce, $this->get_hash() );
 			case self::ALGO_AES256GCM:
 				if ( ! function_exists( 'sodium_crypto_aead_aes256gcm_decrypt' ) ) {
 					throw new RuntimeException( 'AES-256-GCM is not supported by this server, but it cannot decrypt this value.' );
 				}
-				return sodium_crypto_aead_aes256gcm_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+				return sodium_crypto_aead_aes256gcm_decrypt( $ciphertext, $context, $nonce, $this->get_hash() );
 			case self::ALGO_XCHACHA20POLY1305:
 				if ( ! function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt' ) ) {
 					throw new RuntimeException( 'XChaCha20-Poly1305 is not supported by this server, but it cannot decrypt this value.' );
 				}
-				return sodium_crypto_aead_xchacha20poly1305_ietf_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+				return sodium_crypto_aead_xchacha20poly1305_ietf_decrypt( $ciphertext, $context, $nonce, $this->get_hash() );
 			case self::ALGO_CHACHA20POLY1305:
 				if ( ! function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt' ) ) {
 					throw new RuntimeException( 'ChaCha20-Poly1305 is not supported by this server, but it cannot decrypt this value.' );
 				}
-				return sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $ciphertext, '', $nonce, $this->get_hash() );
+				return sodium_crypto_aead_chacha20poly1305_ietf_decrypt( $ciphertext, $context, $nonce, $this->get_hash() );
 			default:
 				throw new RuntimeException( 'Unknown algorithm type in the encrypted value.' );
 		}
@@ -294,7 +337,22 @@ class Sodium extends Method_Base {
 	 * @return string
 	 * @throws RuntimeException If an error occurred.
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text ): string {
+		return $this->encrypt_with_context( $plain_text, '' );
+	}
+
+	/**
+	 * Encrypt a given string.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $plain_text The plain string.
+	 * @param string $context    What the value belongs to, or an empty string. It is authenticated as additional data: the value can only be decrypted with the same context.
+	 *
+	 * @return string
+	 * @throws RuntimeException If an error occurred.
+	 */
+	public function encrypt_with_context( #[\SensitiveParameter] string $plain_text, string $context ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			// log this error.
@@ -312,6 +370,11 @@ class Sodium extends Method_Base {
 			return '';
 		}
 
+		// bail if no key is available.
+		if ( ! $this->has_key() ) {
+			return '';
+		}
+
 		try {
 			// pick the best algorithm tier this server actually supports.
 			$algorithm = $this->detect_algorithm();
@@ -320,13 +383,16 @@ class Sodium extends Method_Base {
 			$nonce = random_bytes( self::NONCE_LENGTHS[ $algorithm ] );
 
 			// get the algorithm to use.
-			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce );
+			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce, $context );
 
 			if ( false === $encrypted_text ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_no_algorithm',
 					'No supported Sodium AEAD algorithm found on this hosting.',
+					array(
+						'context' => $context,
+					)
 				);
 
 				// do nothing more.
@@ -345,6 +411,9 @@ class Sodium extends Method_Base {
 			$this->get_crypt_obj()->add_error(
 				'sodium_encrypt_error',
 				'Error during encrypting via sodium: ' . wp_kses_post( $e->getMessage() ),
+				array(
+					'context' => $context,
+				)
 			);
 
 			// do nothing more.
@@ -361,6 +430,19 @@ class Sodium extends Method_Base {
 	 * @throws RuntimeException If an error occurred.
 	 */
 	public function decrypt( string $encrypted_text ): string {
+		return $this->decrypt_with_context( $encrypted_text, '' );
+	}
+
+	/**
+	 * Decrypt a string.
+	 *
+	 * @param string $encrypted_text The encrypted string.
+	 * @param string $context        The context the value has been encrypted with, or an empty string.
+	 *
+	 * @return string
+	 * @throws RuntimeException If an error occurred.
+	 */
+	public function decrypt_with_context( string $encrypted_text, string $context ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			// log this error.
@@ -378,6 +460,11 @@ class Sodium extends Method_Base {
 			return '';
 		}
 
+		// bail if no key is available.
+		if ( ! $this->has_key() ) {
+			return '';
+		}
+
 		try {
 			// get the payload.
 			$payload = sodium_base642bin( $encrypted_text, $this->get_coding_id() );
@@ -388,6 +475,9 @@ class Sodium extends Method_Base {
 				$this->get_crypt_obj()->add_error(
 					'sodium_payload_not_set',
 					'Sodium payload is not set in encrypted string.',
+					array(
+						'context' => $context,
+					)
 				);
 
 				// do nothing more.
@@ -403,6 +493,7 @@ class Sodium extends Method_Base {
 					'Given algorithm is unknown. Could not decrypt string.',
 					array(
 						'algorithm' => $algorithm,
+						'context'   => $context,
 					)
 				);
 
@@ -420,6 +511,7 @@ class Sodium extends Method_Base {
 					'Payload nonce for encrypted string does not match.',
 					array(
 						'algorithm' => $algorithm,
+						'context'   => $context,
 					)
 				);
 
@@ -431,14 +523,17 @@ class Sodium extends Method_Base {
 			$nonce      = substr( $payload, 1, $nonce_length );
 			$ciphertext = substr( $payload, 1 + $nonce_length );
 
-			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce );
+			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce, $context );
 
 			// bail if the decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_decrypt_error',
-					'Decrypted string is not a string'
+					'Decrypted string is not a string',
+					array(
+						'context' => $context,
+					)
 				);
 
 				// do nothing more.
@@ -451,7 +546,10 @@ class Sodium extends Method_Base {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'sodium_decrypt_error',
-				'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() )
+				'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() ),
+				array(
+					'context' => $context,
+				)
 			);
 
 			// do nothing more.
@@ -469,29 +567,53 @@ class Sodium extends Method_Base {
 	}
 
 	/**
-	 * Uninstall this method.
+	 * Return whether this method can do anything if no place is usable:
+	 * only with a key.
 	 *
-	 * @return void
-	 * @throws SodiumException On Exception through Sodium.
+	 * @internal Used for internal tasks.
+	 *
+	 * @return bool
 	 */
-	public function uninstall(): void {
-		// bail if hash is not saved.
-		if ( ! $this->is_hash_saved() ) {
-			// run parent uninstalling tasks.
-			parent::uninstall();
+	public function is_usable_without_place(): bool {
+		return '' !== $this->get_hash();
+	}
 
-			// do nothing more.
-			return;
+	/**
+	 * Return the name of the option the key of this method is kept in
+	 * during an uninstallation. A later installation reads it from there.
+	 *
+	 * @return string
+	 */
+	protected function get_uninstall_option_name(): string {
+		return $this->get_crypt_obj()->get_slug() . '_sodium_hash';
+	}
+
+	/**
+	 * Return whether this method can work with the given key from a
+	 * constant: only with a key in its own format.
+	 *
+	 * @param string $stored_key The key as it is stored.
+	 *
+	 * @return bool
+	 */
+	protected function is_usable_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
+		return $this->is_valid_stored_key( $stored_key );
+	}
+
+	/**
+	 * Return whether the given value is a key this method could have stored:
+	 * 32 bytes, base64 encoded.
+	 *
+	 * @param string $stored_key The key as it is stored.
+	 *
+	 * @return bool
+	 */
+	protected function is_valid_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
+		try {
+			return SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES === strlen( sodium_base642bin( $stored_key, $this->get_coding_id() ) );
+		} catch ( Exception $e ) {
+			return false;
 		}
-
-		// initiate the method to get the actual hash.
-		$this->init();
-
-		// save the hash in the database.
-		update_option( $this->get_crypt_obj()->get_slug() . '_sodium_hash', $this->get_hash_value() );
-
-		// run the parent uninstall tasks.
-		parent::uninstall();
 	}
 
 	/**

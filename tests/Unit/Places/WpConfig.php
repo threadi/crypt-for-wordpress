@@ -14,6 +14,7 @@
 namespace CryptForWordPress\Tests\Unit\Places;
 
 use CryptForWordPress\Tests\CryptForWordPressTests;
+use CryptForWordPress\Tests\Fixtures\ReadOnlyDirFilesystem;
 
 /**
  * Object to test the WpConfig place.
@@ -173,5 +174,98 @@ PHP;
 		$place->uninstall( $constant );
 
 		$this->assertStringNotContainsString( $constant, file_get_contents( $this->fake_wp_config_path ) );
+	}
+
+	/**
+	 * Test that is_saved() only confirms the hash the file really holds.
+	 *
+	 * @return void
+	 */
+	public function test_is_saved_reports_what_the_file_holds(): void {
+		$place    = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$constant = 'WP_CONFIG_TEST_' . strtoupper( uniqid('', true) );
+
+		$place->set_constant( $constant );
+
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertTrue( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertFalse( $place->is_saved( 'another-hash-value' ) );
+		$this->assertFalse( $place->is_saved( '' ) );
+	}
+
+	/**
+	 * Test that save() really runs inside the file lock. The lock file does
+	 * not exist before the first save, so it must not be required to be
+	 * writable beforehand - it has to be created.
+	 *
+	 * @return void
+	 */
+	public function test_save_uses_the_lock_file(): void {
+		$place = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$place->set_constant( 'WP_CONFIG_TEST_' . strtoupper( uniqid('', true) ) );
+
+		$this->assertFileDoesNotExist( $this->fake_wp_config_path . '.lock' );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertFileExists( $this->fake_wp_config_path . '.lock' );
+		$this->assertFalse( $this->crypt_obj->has_errors() );
+
+		// and a second save works with the then existing lock file as well.
+		$place->save( 'second-hash-value' );
+
+		$this->assertFalse( $this->crypt_obj->has_errors() );
+		$this->assertTrue( $place->is_saved( 'second-hash-value' ) );
+	}
+
+	/**
+	 * Test that save() replaces the file without leaving its temporary
+	 * file behind.
+	 *
+	 * @return void
+	 */
+	public function test_save_leaves_no_temporary_file(): void {
+		$place = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$place->set_constant( 'WP_CONFIG_TEST_' . strtoupper( uniqid('', true) ) );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertSame( array(), glob( $this->fake_wp_config_path . '.tmp-*' ) );
+		$this->assertStringContainsString( "define( 'DB_NAME', 'test_db' );", file_get_contents( $this->fake_wp_config_path ) );
+	}
+
+	/**
+	 * Test that a writable wp-config.php in a directory, which is not
+	 * writable, is not usable: the file is replaced via a temporary file
+	 * next to it, so saving could never succeed there.
+	 *
+	 * @return void
+	 */
+	public function test_not_usable_if_directory_is_not_writable(): void {
+		// WordPress only knows filesystem handlers named "WP_Filesystem_{method}".
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
+		if ( ! class_exists( 'WP_Filesystem_ReadOnlyDir', false ) ) {
+			class_alias( ReadOnlyDirFilesystem::class, 'WP_Filesystem_ReadOnlyDir' );
+		}
+
+		$use_fixture = fn() => 'ReadOnlyDir';
+		add_filter( 'filesystem_method', $use_fixture );
+		ReadOnlyDirFilesystem::$read_only_paths = array( dirname( $this->fake_wp_config_path ) );
+
+		try {
+			$place = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+			$this->assertFalse( $place->is_usable() );
+
+			// with a writable directory the very same file is usable.
+			ReadOnlyDirFilesystem::$read_only_paths = array();
+			$this->assertTrue( $place->is_usable() );
+		} finally {
+			ReadOnlyDirFilesystem::$read_only_paths = array();
+			remove_filter( 'filesystem_method', $use_fixture );
+		}
 	}
 }

@@ -130,4 +130,69 @@ class Database extends CryptForWordPressTests {
 
 		$this->assertFalse( get_option( $option_name ) );
 	}
+
+	/**
+	 * Test that is_saved() only confirms the hash the option really holds.
+	 *
+	 * @return void
+	 */
+	public function test_is_saved_reports_what_the_option_holds(): void {
+		$place = new \CryptForWordPress\Places\Database( $this->crypt_obj );
+
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertTrue( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertFalse( $place->is_saved( 'another-hash-value' ) );
+		$this->assertFalse( $place->is_saved( '' ) );
+	}
+
+	/**
+	 * Test that get_stored_key() returns an existing key without defining or
+	 * logging anything - it is only a lookup for a key an earlier request
+	 * saved here.
+	 *
+	 * @return void
+	 */
+	public function test_get_stored_key_is_a_lookup_without_side_effects(): void {
+		$place    = new \CryptForWordPress\Places\Database( $this->crypt_obj );
+		$constant = strtoupper( $this->crypt_obj->get_slug() ) . '-HASH';
+
+		$place->set_constant( $constant );
+
+		// nothing saved: nothing to return.
+		$this->assertSame( '', $place->get_stored_key() );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertSame( 'unit-test-hash-value', $place->get_stored_key() );
+		$this->assertFalse( defined( $constant ) );
+		$this->assertFalse( $this->crypt_obj->has_errors() );
+	}
+
+	/**
+	 * Test that get_stored_key() respects 'block_database'.
+	 *
+	 * @return void
+	 */
+	public function test_get_stored_key_respects_block_database(): void {
+		$place = new \CryptForWordPress\Places\Database( $this->crypt_obj );
+
+		$place->save( 'unit-test-hash-value' );
+		$place->set_config( array( 'block_database' => true ) );
+
+		$this->assertSame( '', $place->get_stored_key() );
+	}
+
+	/**
+	 * Test that this place is the only one whose key belongs to a single
+	 * site of a multisite network.
+	 *
+	 * @return void
+	 */
+	public function test_key_is_not_network_wide(): void {
+		$this->assertFalse( ( new \CryptForWordPress\Places\Database( $this->crypt_obj ) )->is_network_wide() );
+		$this->assertTrue( ( new \CryptForWordPress\Places\WpConfig( $this->crypt_obj ) )->is_network_wide() );
+	}
 }

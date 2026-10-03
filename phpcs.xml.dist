@@ -33,4 +33,9 @@
     <rule ref="WordPress.WP.AlternativeFunctions.file_system_operations_fclose">
         <exclude-pattern>*/src/Places/WpConfig.php</exclude-pattern>
     </rule>
+
+    <!-- Exclude rename in WpConfig class: it is the only way to replace the file atomically -->
+    <rule ref="WordPress.WP.AlternativeFunctions.rename_rename">
+        <exclude-pattern>*/src/Places/WpConfig.php</exclude-pattern>
+    </rule>
 </ruleset>

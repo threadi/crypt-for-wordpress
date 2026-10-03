@@ -8,6 +8,8 @@ With this method, you define the key used to encrypt text in WordPress yourself.
 
 The entry in the environment variables consists of a key and a value.
 
+Values encrypted by a version before this key was really used (see changelog) are still readable, but not protected: the error `openssl_unprotected_value` is reported when one of them is decrypted. Encrypt and save them again to protect them.
+
 ## Prerequisites
 
 Use https://github.com/vlucas/phpdotenv to work with .env files in WordPress. See the instructions there for setup.

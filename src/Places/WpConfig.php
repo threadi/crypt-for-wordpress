@@ -51,8 +51,15 @@ class WpConfig extends Place_Base {
 			return false;
 		}
 
-		// return whether the detected path is writable.
-		return Helper::is_writable( $wp_config_path );
+		// bail if the detected path is not writable.
+		if ( ! Helper::is_writable( $wp_config_path ) ) {
+			return false;
+		}
+
+		// the file is replaced via a temporary file next to it (see
+		// atomic_put_contents()), so its directory has to be writable as well.
+		// Without this check the place would be chosen, but could never save.
+		return Helper::is_writable( dirname( $wp_config_path ) );
 	}
 
 	/**
@@ -69,7 +76,7 @@ class WpConfig extends Place_Base {
 	 *
 	 * @return void
 	 */
-	public function save( string $hash ): void {
+	public function save( #[\SensitiveParameter] string $hash ): void {
 		// get the wp-config.php path.
 		$wp_config_php_path = $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() );
 
@@ -101,7 +108,7 @@ class WpConfig extends Place_Base {
 				$wp_config_php_content = preg_replace( '@\n' . preg_quote( $placeholder, '@' ) . '@', '', (string) $wp_config_php_content );
 
 				// add the constant.
-				$define = "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' ); // Added by " . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
+				$define = $this->get_define_statement( $hash ) . ' // Added by ' . Helper::sanitize_for_php_comment( $this->get_crypt_obj()->get_plugin_name() ) . ".\r\n";
 
 				// insert right before the (non-localized) ABSPATH-check that follows the
 				// translatable "stop editing" comment - this works regardless of the
@@ -141,6 +148,15 @@ class WpConfig extends Place_Base {
 		);
 	}
 
+	/**
+	 * Return whether the wp-config.php holds the given hash.
+	 *
+	 * @param string $hash The hash that has been saved.
+	 * @return bool
+	 */
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
+		return $this->file_holds_hash( $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() ), $hash );
+	}
 
 	/**
 	 * Run the given callback while holding an exclusive lock for the given target file.
@@ -155,7 +171,7 @@ class WpConfig extends Place_Base {
 	 * @param callable $callback The code to run while the lock is held.
 	 * @return void
 	 */
-	private function with_lock( string $target_path, callable $callback ): void {
+	private function with_lock( string $target_path, #[\SensitiveParameter] callable $callback ): void {
 		// get the "WP_Filesystem" object.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
@@ -171,8 +187,14 @@ class WpConfig extends Place_Base {
 		// define the lock path.
 		$lock_path = $target_path . '.lock';
 
+		// the lock file is created with its first usage: until then it is the
+		// directory which has to be writable, afterward the file itself.
+		$lockable = $wp_filesystem->exists( $lock_path )
+			? $wp_filesystem->is_writable( $lock_path )
+			: $wp_filesystem->is_writable( dirname( $lock_path ) );
+
 		// bail if lock file is not writable.
-		if ( ! $wp_filesystem->is_writable( $lock_path ) ) {
+		if ( ! $lockable ) {
 			// log this as error.
 			$this->get_crypt_obj()->add_error(
 				'wpconfig_lock_not_writable',
@@ -218,13 +240,18 @@ class WpConfig extends Place_Base {
 	 * A rename on the same filesystem is atomic, so any concurrent reader either sees the
 	 * complete old content, or the complete new content - never a truncated/partial file.
 	 *
+	 * On the local filesystem the native rename() is used for this on purpose:
+	 * WP_Filesystem_Direct::move() deletes the target first and renames afterward, which
+	 * leaves a moment without any wp-config.php - and no wp-config.php at all if the
+	 * process dies in between.
+	 *
 	 * @param WP_Filesystem_Base $wp_filesystem The WP_Filesystem-handler to use.
 	 * @param string             $path The target path to write to.
 	 * @param string             $content The content to write.
 	 *
 	 * @return void
 	 */
-	private function atomic_put_contents( WP_Filesystem_Base $wp_filesystem, string $path, string $content ): void {
+	private function atomic_put_contents( WP_Filesystem_Base $wp_filesystem, string $path, #[\SensitiveParameter] string $content ): void {
 		// build a unique temp-file-path next to the target, so move() stays on the same filesystem.
 		$tmp_path = $path . '.tmp-' . wp_generate_password( 12, false );
 
@@ -240,8 +267,14 @@ class WpConfig extends Place_Base {
 			return;
 		}
 
-		// atomically move the temp file onto the target, overwriting it.
-		if ( ! $wp_filesystem->move( $tmp_path, $path, true ) ) {
+		// atomically move the temp file onto the target, overwriting it. There
+		// is deliberately no fallback to move() on the local filesystem: it
+		// would delete the wp-config.php before trying the very same rename.
+		$moved = $wp_filesystem instanceof WP_Filesystem_Direct
+			? rename( $tmp_path, $path )
+			: $wp_filesystem->move( $tmp_path, $path, true );
+
+		if ( ! $moved ) {
 			// clean up the temp file if the move failed.
 			$wp_filesystem->delete( $tmp_path );
 

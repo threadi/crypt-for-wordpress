@@ -90,10 +90,24 @@ class MuPlugin extends CryptForWordPressTests {
 		$hash     = 'unit-test-hash-value';
 
 		$place->set_constant( $constant );
+		$this->assertFalse( $place->is_saved( $hash ) );
+
 		$place->save( $hash );
 
 		$file_path = WPMU_PLUGIN_DIR . DIRECTORY_SEPARATOR . $this->crypt_obj->get_slug() . '-hash.php';
 		$this->assertFileExists( $file_path );
+
+		// the place confirms the hash it holds, and no other one.
+		$this->assertTrue( $place->is_saved( $hash ) );
+		$this->assertFalse( $place->is_saved( 'another-hash-value' ) );
+
+		// saving the key of another method keeps this one in the file.
+		$place->set_constant( $constant . '_SODIUM' );
+		$place->save( 'key-of-another-method' );
+		$this->assertTrue( $place->is_saved( 'key-of-another-method' ) );
+
+		$place->set_constant( $constant );
+		$this->assertTrue( $place->is_saved( $hash ) );
 
 		// mu-plugins are auto-loaded by WordPress core on every request, before
 		// any of our own code runs - we simulate that here by requiring the
