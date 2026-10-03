@@ -12,6 +12,8 @@ The **wp-config.php** file is primarily used for this purpose. If this file is n
 
 Data encryption is not a silver bullet for protecting data. Projects that involve sensitive data should be secured through additional measures encryption. These include, for example, security plugins. This composer package is not the only solution for this, but it can help.
 
+See: [What this package protects against - and what not](docs/SecurityModel.md)
+
 ## Demo
 
 [This demo plugin](https://github.com/threadi/crypt-for-wordpress-demo) demonstrates how the encryption could be used.
@@ -103,6 +105,12 @@ if( $crypt->has_errors() ) {
 This is an WP_Error object, which will contain any error happened during the request.
 
 See also: [Error Handling](docs/ErrorHandling.md)
+
+## Several plugins on one website
+
+If other plugins or themes of a website ship this package as well, all of them share one version of it - not necessarily the one you ship. Give your plugin its own copy to prevent this.
+
+See: [Using the package in several plugins](docs/MultiplePlugins.md)
 
 ## Uninstall
 

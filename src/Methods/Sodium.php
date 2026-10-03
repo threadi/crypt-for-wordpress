@@ -266,7 +266,7 @@ class Sodium extends Method_Base {
 	 * @return string|false The ciphertext, or false if the algorithm is unavailable.
 	 * @throws SodiumException Could throw a sodium exception.
 	 */
-	private function encrypt_with( int $algorithm, string $plain_text, string $nonce, string $context ): false|string {
+	private function encrypt_with( int $algorithm, #[\SensitiveParameter] string $plain_text, string $nonce, string $context ): false|string {
 		switch ( $algorithm ) {
 			case self::ALGO_AEGIS256:
 				return function_exists( 'sodium_crypto_aead_aegis256_encrypt' )
@@ -337,7 +337,7 @@ class Sodium extends Method_Base {
 	 * @return string
 	 * @throws RuntimeException If an error occurred.
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text ): string {
 		return $this->encrypt_with_context( $plain_text, '' );
 	}
 
@@ -352,7 +352,7 @@ class Sodium extends Method_Base {
 	 * @return string
 	 * @throws RuntimeException If an error occurred.
 	 */
-	public function encrypt_with_context( string $plain_text, string $context ): string {
+	public function encrypt_with_context( #[\SensitiveParameter] string $plain_text, string $context ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			// log this error.
@@ -390,6 +390,9 @@ class Sodium extends Method_Base {
 				$this->get_crypt_obj()->add_error(
 					'sodium_no_algorithm',
 					'No supported Sodium AEAD algorithm found on this hosting.',
+					array(
+						'context' => $context,
+					)
 				);
 
 				// do nothing more.
@@ -408,6 +411,9 @@ class Sodium extends Method_Base {
 			$this->get_crypt_obj()->add_error(
 				'sodium_encrypt_error',
 				'Error during encrypting via sodium: ' . wp_kses_post( $e->getMessage() ),
+				array(
+					'context' => $context,
+				)
 			);
 
 			// do nothing more.
@@ -590,7 +596,7 @@ class Sodium extends Method_Base {
 	 *
 	 * @return bool
 	 */
-	protected function is_usable_stored_key( string $stored_key ): bool {
+	protected function is_usable_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
 		return $this->is_valid_stored_key( $stored_key );
 	}
 
@@ -602,7 +608,7 @@ class Sodium extends Method_Base {
 	 *
 	 * @return bool
 	 */
-	protected function is_valid_stored_key( string $stored_key ): bool {
+	protected function is_valid_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
 		try {
 			return SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES === strlen( sodium_base642bin( $stored_key, $this->get_coding_id() ) );
 		} catch ( Exception $e ) {

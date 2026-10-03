@@ -10,12 +10,47 @@ namespace CryptForWordPress;
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
 
+use ReflectionClass;
+use ReflectionException;
 use WP_Error;
 
 /**
  * Object to handle crypt tasks.
  */
 class Crypt {
+	/**
+	 * The files of the other classes of this package, relative to the
+	 * directory of this file. Base classes first.
+	 *
+	 * The name of a class is the path of its file - they are not listed as
+	 * names, so tools which change the namespace of this package have
+	 * nothing to rewrite here.
+	 *
+	 * @var array<int,string>
+	 */
+	private const PACKAGE_FILES = array(
+		'Helper.php',
+		'Method_Base.php',
+		'Place_Base.php',
+		'Methods/OpenSsl.php',
+		'Methods/Sodium.php',
+		'Methods/Plain.php',
+		'Places/WpConfig.php',
+		'Places/MuPlugin.php',
+		'Places/Database.php',
+		'Places/CustomFile.php',
+		'Places/EnvironmentVariable.php',
+		'Places/ServerVariable.php',
+		'Places/WordPressSalts.php',
+	);
+
+	/**
+	 * Whether the other classes of this package have been loaded.
+	 *
+	 * @var bool
+	 */
+	private static bool $package_classes_loaded = false;
+
 	/**
 	 * Define the method for crypt-tasks.
 	 *
@@ -38,6 +73,21 @@ class Crypt {
 	private string $slug;
 
 	/**
+	 * The file the slug has been derived from, or an empty string if the
+	 * slug has been set with set_slug().
+	 *
+	 * @var string
+	 */
+	private string $slug_derived_from;
+
+	/**
+	 * Whether the derived slug has been checked already.
+	 *
+	 * @var bool
+	 */
+	private bool $slug_checked = false;
+
+	/**
 	 * The method configurations.
 	 *
 	 * @var array<string,array<string,mixed>|string>
@@ -57,8 +107,126 @@ class Crypt {
 	 * @param string $plugin_path The path to the WordPress plugin using this object. E.g., __FILE__.
 	 */
 	public function __construct( string $plugin_path ) {
-		$this->plugin_file = $plugin_path;
-		$this->slug        = dirname( plugin_basename( $plugin_path ) );
+		$this->plugin_file       = $plugin_path;
+		$this->slug              = dirname( plugin_basename( $plugin_path ) );
+		$this->slug_derived_from = $plugin_path;
+	}
+
+	/**
+	 * Report a derived slug, which is not suited to name the key.
+	 *
+	 * The slug is the name of the directory of the plugin. Where there is no
+	 * such directory, what is derived instead causes trouble later:
+	 *
+	 * - A plugin consisting of a single file and a Must-Use plugin all get
+	 *   the slug ".", and with it the same key.
+	 * - A file which is not part of a plugin, e.g. of a theme, gets a slug
+	 *   containing the path of this installation. If the website is moved,
+	 *   the slug changes - and the key saved under the former one is not
+	 *   found anymore.
+	 *
+	 * The slug is not changed here: that would be a new key for every
+	 * installation already using it. It is only reported, once per object,
+	 * so the developer can set a slug with set_slug().
+	 *
+	 * @return void
+	 */
+	private function report_unsuitable_slug(): void {
+		// bail if this has been done already.
+		if ( $this->slug_checked ) {
+			return;
+		}
+		$this->slug_checked = true;
+
+		// bail if the slug has been set by the developer.
+		if ( '' === $this->slug_derived_from ) {
+			return;
+		}
+
+		// the file has no directory of its own.
+		if ( '.' === $this->slug ) {
+			// log this as warning.
+			$this->add_error(
+				'slug_not_unique',
+				'The file given to the Crypt object has no directory of its own, so its slug - and with it the key - is shared with every other plugin of that kind. Set a slug with set_slug().'
+			);
+
+			// do nothing more.
+			return;
+		}
+
+		// the file is not part of a plugin: its path has been left as it is.
+		if ( trim( wp_normalize_path( $this->slug_derived_from ), '/' ) === plugin_basename( $this->slug_derived_from ) ) {
+			// log this as warning.
+			$this->add_error(
+				'slug_depends_on_path',
+				'The file given to the Crypt object is not part of a plugin, so its slug contains the path of this installation. If the website is moved, the key is not found anymore. Set a slug with set_slug().',
+				array(
+					'slug' => $this->slug,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Load the other classes of this package from the directory of this file.
+	 *
+	 * Several plugins of a website may ship this package, in different
+	 * versions. An autoloader is asked per class: without this, the methods
+	 * and places could be taken from the copy of another plugin than this
+	 * class - classes of two versions, which do not fit together.
+	 *
+	 * These are the files the autoloader would load anyway as soon as a
+	 * method or a place is needed.
+	 *
+	 * If one of the classes has been loaded from another copy already - e.g.
+	 * as the parent of a method of another plugin - nothing is loaded here:
+	 * the classes cannot be of one version anymore, and adding the ones of
+	 * this copy to the ones of the other is the mix this should prevent. The
+	 * autoloader decides then, as it did before.
+	 *
+	 * @return void
+	 */
+	private static function load_package_classes(): void {
+		// bail if this has been done already.
+		if ( self::$package_classes_loaded ) {
+			return;
+		}
+		self::$package_classes_loaded = true;
+
+		// collect the files of the classes, which do not exist yet.
+		$files_to_load = array();
+		foreach ( self::PACKAGE_FILES as $file ) {
+			$class_name = __NAMESPACE__ . '\\' . str_replace( '/', '\\', substr( $file, 0, -4 ) );
+			$path       = __DIR__ . '/' . $file;
+
+			// load the class, if it does not exist yet.
+			if ( ! class_exists( $class_name, false ) ) {
+				$files_to_load[] = $path;
+				continue;
+			}
+
+			// get the file the class has been loaded from.
+			try {
+				$loaded_from = ( new ReflectionClass( $class_name ) )->getFileName();
+			} catch ( ReflectionException $e ) {
+				// bail completely if this cannot be found out: nothing is
+				// loaded here then, and the autoloader decides as before.
+				return;
+			}
+
+			// bail completely if the class has been loaded from another copy.
+			if ( realpath( (string) $loaded_from ) !== realpath( $path ) ) {
+				return;
+			}
+		}
+
+		foreach ( $files_to_load as $path ) {
+			// load the class. If its file does not exist, the autoloader is asked later.
+			if ( is_readable( $path ) ) {
+				require_once $path;
+			}
+		}
 	}
 
 	/**
@@ -70,6 +238,9 @@ class Crypt {
 		if ( $this->method instanceof Method_Base ) {
 			return $this->method;
 		}
+
+		// report a slug which is not suited to name the key.
+		$this->report_unsuitable_slug();
 
 		// get the place object.
 		$place_obj = $this->get_place();
@@ -183,7 +354,7 @@ class Crypt {
 	 *
 	 * @return string
 	 */
-	public function encrypt( string $plain_text, string $context = '' ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text, string $context = '' ): string {
 		// get the active method.
 		$method_obj = $this->get_method();
 
@@ -277,6 +448,9 @@ class Crypt {
 			return array();
 		}
 
+		// make sure the classes of this package come from its own copy.
+		self::load_package_classes();
+
 		// define the list for objects.
 		$list = array();
 
@@ -363,7 +537,8 @@ class Crypt {
 	 * @return void
 	 */
 	public function set_slug( string $slug ): void {
-		$this->slug = $slug;
+		$this->slug              = $slug;
+		$this->slug_derived_from = '';
 	}
 
 	/**
@@ -532,6 +707,9 @@ class Crypt {
 			return array();
 		}
 
+		// make sure the classes of this package come from its own copy.
+		self::load_package_classes();
+
 		// define the list for objects.
 		$list = array();
 
@@ -596,7 +774,7 @@ class Crypt {
 	 * @param string $hash The hash to use.
 	 * @return void
 	 */
-	public function save_in_place( string $constant, string $hash ): void {
+	public function save_in_place( string $constant, #[\SensitiveParameter] string $hash ): void {
 		// get the place to use.
 		$place_obj = $this->get_place();
 
@@ -622,7 +800,7 @@ class Crypt {
 	/**
 	 * Return whether the configured place holds the given hash in the constant.
 	 *
-	 * Used right after save_in_place(): a write is not trusted until the
+	 * Used right after save_in_place(): write is not trusted until the
 	 * place confirms it.
 	 *
 	 * @internal Used for internal tasks.
@@ -631,7 +809,7 @@ class Crypt {
 	 * @param string $hash The hash to check.
 	 * @return bool
 	 */
-	public function is_saved_in_place( string $constant, string $hash ): bool {
+	public function is_saved_in_place( string $constant, #[\SensitiveParameter] string $hash ): bool {
 		// get the place to use.
 		$place_obj = $this->get_place();
 

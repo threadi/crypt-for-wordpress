@@ -102,7 +102,7 @@ class Database extends Place_Base {
 	 * @param string $hash The hash to save.
 	 * @return void
 	 */
-	public function save( string $hash ): void {
+	public function save( #[\SensitiveParameter] string $hash ): void {
 		update_option( $this->get_option_name(), $hash, true );
 	}
 
@@ -112,7 +112,7 @@ class Database extends Place_Base {
 	 * @param string $hash The hash that has been saved.
 	 * @return bool
 	 */
-	public function is_saved( string $hash ): bool {
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
 		return '' !== $hash && get_option( $this->get_option_name(), '' ) === $hash;
 	}
 

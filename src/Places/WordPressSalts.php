@@ -97,7 +97,7 @@ class WordPressSalts extends Place_Base {
 	 * @param string $hash The hash that has been saved.
 	 * @return bool
 	 */
-	public function is_saved( string $hash ): bool { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- nothing can be saved here.
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- nothing can be saved here.
 		return false;
 	}
 

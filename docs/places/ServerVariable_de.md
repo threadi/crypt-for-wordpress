@@ -8,6 +8,8 @@ Bei diesem Weg legst du selbst den Schlüssel fest, der für die Verschlüsselun
 
 Die Angabe in den Umgebungsvariablen besteht aus einem Key und einem Value. 
 
+Werte, die eine Version verschlüsselt hat, bevor dieser Schlüssel tatsächlich verwendet wurde (siehe Changelog), bleiben lesbar, sind aber nicht geschützt: Beim Entschlüsseln eines solchen Werts wird der Fehler `openssl_unprotected_value` gemeldet. Verschlüssele und speichere sie erneut, um sie zu schützen.
+
 ## Voraussetzungen
 
 Ein Hosting in dem du serverseitig Umgebungsvariable setzen kannst. Diese müssen in der PHP-Variable `$_SERVER` bereitgestellt werden. Wende dich bei Fragen dazu an den Support deines Hosters.

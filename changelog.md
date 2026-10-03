@@ -1,13 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [4.0.0] - 03.10.2026
 
 ### Added
 
+- Added the warnings "slug_not_unique" and "slug_depends_on_path": a slug derived from a file without a plugin directory of its own - a single-file plugin, a Must-Use plugin, a theme - is shared with others or changes if the website is moved. Nothing else changes for these installations, the slug stays as it is
 - Added an optional context as second parameter of `encrypt()` and `decrypt()`: a value bound to a context cannot be decrypted in another one, e.g. after its encrypted form has been copied into another field
 - Added the errors "key_missing" and "key_changed": if the key of an installation is lost or replaced, this is reported once instead of happening silently. A new key is still generated automatically
 - Added the errors "key_not_saved", "no_key_available", "openssl_unprotected_value", "context_not_supported" and the warning "key_in_inactive_place"
+- Added the context to the data of the errors `encrypt()` and `decrypt()` report about a value - an empty string, if none is used
 - Added `encrypt_with_context()` and `decrypt_with_context()` on methods
+- Added documentation about what the package protects against, and about using it in several plugins of one website
 - Added `is_saved()`, `get_stored_key()` and `is_network_wide()` on places, and `is_saved_in_place()` on the Crypt object
 
 ### Changed
@@ -23,6 +26,9 @@
 - A new key is only used once it really has been saved in its place. Otherwise, nothing is encrypted
 - The key an uninstallation left in the database is only removed there once the place really holds it
 - The wp-config.php is only used as place if its directory is writable as well, otherwise the next place is used
+- The Crypt class loads the other classes of this package from its own directory. If several plugins ship this package in different versions, the plugin whose Crypt class is in use gets the methods and places of the same version - a mix ended in a fatal error. Only if a class of another copy has been loaded before, the autoloader decides as it did
+- The methods work with the Crypt class of version 3.1.0, if PHP has loaded that one from the copy of another plugin which has not been updated yet. They look for a missing key and check a written key themselves then - within the places a configured 'force_place' leaves, as that Crypt class does not hand out the others
+- Plain texts and keys are marked as sensitive parameters of the functions of this package, so PHP replaces them in stack traces - in the error log, in debugging plugins and in error trackers. Such a stack trace cannot be serialized, like every one containing a password function of PHP itself
 
 ### Fixed
 

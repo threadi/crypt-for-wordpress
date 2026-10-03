@@ -8,7 +8,9 @@ Without further configuration, when first loaded in a WordPress environment, the
 
 1. first in the **wp-config.php** file
 2. if this file is not writable, a Must-Use plugin is generated and stored
-3. if that also fails, no key is stored and no encryption will be used
+3. if that also fails, the key is stored in the database. As the encrypted data resides there as well, this is reported as error `insecure_place_database`. Set `'block_database' => true` in the configuration to prevent it
+4. if the database is blocked, the key is derived from the WordPress salts. This is reported as error `insecure_place_wordpress_salts`. Set `'block_salts' => true` in the configuration to prevent it
+5. if no place is left, no key is stored and nothing is encrypted: `encrypt()` returns an empty string
 
 ### Hint
 
@@ -23,6 +25,8 @@ If you would like to keep the key separate from your database credentials, you c
 * [a custom file](places/CustomFile.md)
 * [a server environment variable](places/ServerVariable.md)
 * [an environment variable](places/EnvironmentVariable.md)
+* the database (not recommended, see above)
+* the WordPress salts (not recommended, see above)
 
 ## Custom Locations
 

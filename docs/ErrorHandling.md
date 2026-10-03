@@ -12,6 +12,8 @@ if( $crypt->has_errors() ) {
 
 This is a WP_Error object, which will contain any errors that occurred during the request.
 
+If you pass a context to `encrypt()` or `decrypt()`, their errors about the value name it in their data as `context` - so you can tell which of your values is affected. It is the context given to this call. Errors about the key or the configuration, like `no_key_available`, do not belong to a single value and have no such entry: read it with `$data['context'] ?? ''`. As it may end up in logs this way: never put anything secret into the context.
+
 ## Querying via a Hook
 
 Individual errors are passed here.

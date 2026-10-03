@@ -76,7 +76,7 @@ class WpConfig extends Place_Base {
 	 *
 	 * @return void
 	 */
-	public function save( string $hash ): void {
+	public function save( #[\SensitiveParameter] string $hash ): void {
 		// get the wp-config.php path.
 		$wp_config_php_path = $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() );
 
@@ -154,7 +154,7 @@ class WpConfig extends Place_Base {
 	 * @param string $hash The hash that has been saved.
 	 * @return bool
 	 */
-	public function is_saved( string $hash ): bool {
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
 		return $this->file_holds_hash( $this->get_wp_config_path( $this->get_crypt_obj()->get_slug() ), $hash );
 	}
 
@@ -171,7 +171,7 @@ class WpConfig extends Place_Base {
 	 * @param callable $callback The code to run while the lock is held.
 	 * @return void
 	 */
-	private function with_lock( string $target_path, callable $callback ): void {
+	private function with_lock( string $target_path, #[\SensitiveParameter] callable $callback ): void {
 		// get the "WP_Filesystem" object.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
@@ -251,7 +251,7 @@ class WpConfig extends Place_Base {
 	 *
 	 * @return void
 	 */
-	private function atomic_put_contents( WP_Filesystem_Base $wp_filesystem, string $path, string $content ): void {
+	private function atomic_put_contents( WP_Filesystem_Base $wp_filesystem, string $path, #[\SensitiveParameter] string $content ): void {
 		// build a unique temp-file-path next to the target, so move() stays on the same filesystem.
 		$tmp_path = $path . '.tmp-' . wp_generate_password( 12, false );
 

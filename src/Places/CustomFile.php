@@ -78,7 +78,7 @@ class CustomFile extends Place_Base {
 	 * @param string $hash The hash to save.
 	 * @return void
 	 */
-	public function save( string $hash ): void {
+	public function save( #[\SensitiveParameter] string $hash ): void {
 		// get the path.
 		$path = $this->configuration['custom_file_path'];
 
@@ -166,7 +166,7 @@ class CustomFile extends Place_Base {
 	 * @param string $hash The hash that has been saved.
 	 * @return bool
 	 */
-	public function is_saved( string $hash ): bool {
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
 		$path = $this->get_local_path();
 
 		return '' !== $path && $this->file_holds_hash( $path, $hash );

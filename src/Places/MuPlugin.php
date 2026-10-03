@@ -84,7 +84,7 @@ class MuPlugin extends Place_Base {
 	 * @param string $hash The hash to save.
 	 * @return void
 	 */
-	public function save( string $hash ): void {
+	public function save( #[\SensitiveParameter] string $hash ): void {
 		// get WP Filesystem-handler.
 		$wp_filesystem = Helper::get_wp_filesystem();
 
@@ -130,7 +130,7 @@ class MuPlugin extends Place_Base {
 	 * @param string $hash The hash that has been saved.
 	 * @return bool
 	 */
-	public function is_saved( string $hash ): bool {
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
 		// bail if the "must-use"-plugin-directory is not set.
 		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
 			return false;

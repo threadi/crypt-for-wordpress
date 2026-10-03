@@ -290,7 +290,7 @@ class OpenSsl extends Method_Base {
 	 * @return string
 	 * @throws RuntimeException If an error occurred.
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text ): string {
 		return $this->encrypt_with_context( $plain_text, '' );
 	}
 
@@ -304,7 +304,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @throws RuntimeException If an error occurred.
 	 */
-	public function encrypt_with_context( string $plain_text, string $context ): string {
+	public function encrypt_with_context( #[\SensitiveParameter] string $plain_text, string $context ): string {
 		// bail if slug is not set.
 		if ( empty( $this->get_crypt_obj()->get_slug() ) ) {
 			// log this error.
@@ -683,7 +683,7 @@ class OpenSsl extends Method_Base {
 				if ( '' !== $original_plaintext ) {
 					// report a value which has never been protected.
 					if ( self::NO_KEY === $key ) {
-						$this->report_unprotected_value();
+						$this->report_unprotected_value( $context );
 					}
 
 					break;
@@ -855,7 +855,7 @@ class OpenSsl extends Method_Base {
 				if ( '' !== $original_plaintext ) {
 					// report a value which has never been protected.
 					if ( $is_unprotected ) {
-						$this->report_unprotected_value();
+						$this->report_unprotected_value( $context );
 					}
 
 					break;
@@ -911,7 +911,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return bool
 	 */
-	protected function is_valid_stored_key( string $stored_key ): bool {
+	protected function is_valid_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
 		return '' !== $this->decode_key( $stored_key );
 	}
 
@@ -922,7 +922,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return string The raw key, or an empty string if it cannot be decoded.
 	 */
-	private function decode_key( string $stored_key ): string {
+	private function decode_key( #[\SensitiveParameter] string $stored_key ): string {
 		// the pbkdf2 hash type is stored base64 encoded.
 		if ( 'hash_pbkdf2' === $this->configuration['hash_type'] ) {
 			$decoded = base64_decode( $stored_key, true );
@@ -960,7 +960,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return string
 	 */
-	private function derive_key( string $purpose, int $length, string $hash ): string {
+	private function derive_key( string $purpose, int $length, #[\SensitiveParameter] string $hash ): string {
 		// bail if hash is empty.
 		if ( '' === $hash ) {
 			return '';
@@ -1039,12 +1039,17 @@ class OpenSsl extends Method_Base {
 	/**
 	 * Report that a value has been decrypted which has never been protected.
 	 *
+	 * @param string $context The context the value has been requested with. Values of older versions have none.
+	 *
 	 * @return void
 	 */
-	private function report_unprotected_value(): void {
+	private function report_unprotected_value( string $context ): void {
 		$this->get_crypt_obj()->add_error(
 			'openssl_unprotected_value',
-			'This value has been written by an older version without a usable key, so it is not protected. Encrypt it again to protect it.'
+			'This value has been written by an older version without a usable key, so it is not protected. Encrypt it again to protect it.',
+			array(
+				'context' => $context,
+			)
 		);
 	}
 
@@ -1061,7 +1066,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return string The decrypted plaintext, or '' on failure.
 	 */
-	private function try_decrypt_aead( string $cipher, string $ciphertext, string $iv, string $tag, string $key, string $context, string &$error_code ): string {
+	private function try_decrypt_aead( string $cipher, string $ciphertext, string $iv, string $tag, #[\SensitiveParameter] string $key, string $context, string &$error_code ): string {
 		// reset the reason of this attempt.
 		$error_code = '';
 
@@ -1113,7 +1118,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return string The decrypted plaintext, or '' on failure.
 	 */
-	private function decrypt_non_aead( string $cipher, string $iv_encoded, string $payload_encoded, int $iv_length, string $enc_key, string $hmac_key, string $context ): string {
+	private function decrypt_non_aead( string $cipher, string $iv_encoded, string $payload_encoded, int $iv_length, #[\SensitiveParameter] string $enc_key, #[\SensitiveParameter] string $hmac_key, string $context ): string {
 		// bail if the keys are not available. The reason has been logged already.
 		if ( '' === $enc_key || '' === $hmac_key ) {
 			return '';
@@ -1177,7 +1182,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return string The decrypted plaintext, or '' on failure.
 	 */
-	private function try_decrypt_non_aead( string $cipher, string $ciphertext_raw, string $iv, string $hmac, string $enc_key, string $hmac_key, string &$error_code ): string {
+	private function try_decrypt_non_aead( string $cipher, string $ciphertext_raw, string $iv, string $hmac, #[\SensitiveParameter] string $enc_key, #[\SensitiveParameter] string $hmac_key, string &$error_code ): string {
 		// reset the reason of this attempt.
 		$error_code = '';
 
@@ -1228,7 +1233,7 @@ class OpenSsl extends Method_Base {
 	 *
 	 * @return string
 	 */
-	private function encode_key( string $raw_key ): string {
+	private function encode_key( #[\SensitiveParameter] string $raw_key ): string {
 		// the pbkdf2 hash type is stored base64 encoded.
 		if ( 'hash_pbkdf2' === $this->configuration['hash_type'] ) {
 			return base64_encode( $raw_key );

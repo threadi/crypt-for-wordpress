@@ -66,7 +66,7 @@ class Place_Base {
 	 * @param string $hash The hash to save.
 	 * @return void
 	 */
-	public function save( string $hash ): void {}
+	public function save( #[\SensitiveParameter] string $hash ): void {}
 
 	/**
 	 * Return whether this place holds the given hash.
@@ -78,7 +78,7 @@ class Place_Base {
 	 * @param string $hash The hash that has been saved.
 	 * @return bool
 	 */
-	public function is_saved( string $hash ): bool {
+	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
 		return '' !== $hash;
 	}
 
@@ -88,7 +88,7 @@ class Place_Base {
 	 * @param string $hash The hash.
 	 * @return string
 	 */
-	protected function get_define_statement( string $hash ): string {
+	protected function get_define_statement( #[\SensitiveParameter] string $hash ): string {
 		return "define( '" . $this->get_constant() . "', '" . addslashes( $hash ) . "' );";
 	}
 
@@ -157,7 +157,7 @@ class Place_Base {
 	 * @param string $hash The hash.
 	 * @return bool
 	 */
-	protected function file_holds_hash( string $path, string $hash ): bool {
+	protected function file_holds_hash( string $path, #[\SensitiveParameter] string $hash ): bool {
 		// bail if nothing could have been saved.
 		if ( '' === $hash || '' === $this->get_constant() ) {
 			return false;

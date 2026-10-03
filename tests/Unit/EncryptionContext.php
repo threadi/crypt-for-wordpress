@@ -316,6 +316,172 @@ class EncryptionContext extends CryptForWordPressTests {
 	}
 
 	/**
+	 * Test that an error of decrypt() names the context the value has been
+	 * requested with, so a plugin can tell which of its values is affected.
+	 *
+	 * It is the context given to decrypt(): the one a value has been
+	 * encrypted with cannot be known.
+	 *
+	 * @return void
+	 */
+	public function test_error_names_the_requested_context(): void {
+		foreach ( $this->get_initialized_methods() as $name => list( $crypt_obj, $method ) ) {
+			$encrypted = $method->encrypt_with_context( 'sk_live_123', 'api_secret' );
+
+			$this->assertSame( '', $method->decrypt_with_context( $encrypted, 'display_name' ), 'Method: ' . $name );
+
+			$codes = $crypt_obj->get_errors()->get_error_codes();
+			$this->assertCount( 1, $codes, 'Method: ' . $name );
+
+			$data = $crypt_obj->get_errors()->get_error_data( $codes[0] );
+			$this->assertIsArray( $data, 'Method: ' . $name );
+			$this->assertSame( 'display_name', $data['context'] ?? null, 'Method: ' . $name . ' / ' . $codes[0] );
+		}
+	}
+
+	/**
+	 * Test that the context is passed to the hook as well, which is how a
+	 * plugin usually collects the errors.
+	 *
+	 * @return void
+	 */
+	public function test_error_hook_receives_the_context(): void {
+		foreach ( $this->get_initialized_methods() as $name => list( $crypt_obj, $method ) ) {
+			$received = array();
+
+			add_action(
+				$crypt_obj->get_slug() . '_crypt_error',
+				function ( string $code, string $message, array $data ) use ( &$received ): void {
+					$received[] = $data;
+				},
+				10,
+				3
+			);
+
+			// a value which cannot be read at all.
+			$this->assertSame( '', $method->decrypt_with_context( 'not an encrypted value', 'account:7:token' ), 'Method: ' . $name );
+
+			$this->assertNotEmpty( $received, 'Method: ' . $name );
+			foreach ( $received as $data ) {
+				$this->assertSame( 'account:7:token', $data['context'] ?? null, 'Method: ' . $name );
+			}
+		}
+	}
+
+	/**
+	 * Test that the context is part of the data of an error about a value
+	 * even if none is used: it is an empty string then.
+	 *
+	 * @return void
+	 */
+	public function test_error_has_an_empty_context_without_context(): void {
+		foreach ( $this->get_initialized_methods() as $name => list( $crypt_obj, $method ) ) {
+			$encrypted = $method->encrypt_with_context( 'sk_live_123', 'api_secret' );
+
+			$this->assertSame( '', $method->decrypt( $encrypted ), 'Method: ' . $name );
+
+			$codes = $crypt_obj->get_errors()->get_error_codes();
+			$data  = $crypt_obj->get_errors()->get_error_data( $codes[0] );
+
+			$this->assertIsArray( $data, 'Method: ' . $name );
+			$this->assertSame( '', $data['context'] ?? null, 'Method: ' . $name . ' / ' . $codes[0] );
+		}
+	}
+
+	/**
+	 * Test that Sodium names the context if encrypting fails - here because
+	 * of a key with the wrong length.
+	 *
+	 * @return void
+	 */
+	public function test_sodium_names_the_context_if_encrypting_fails(): void {
+		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
+		$crypt_obj->set_slug( 'context-sodium-error-' . uniqid( '', true ) );
+		$crypt_obj->set_config(
+			array(
+				'force_method' => 'sodium',
+				'force_place'  => 'database',
+			)
+		);
+
+		define( strtoupper( $crypt_obj->get_slug() ) . '-SODIUM-HASH', base64_encode( 'short' ) );
+
+		$this->assertSame( '', $crypt_obj->encrypt( 'Hallo World', 'api_secret' ) );
+
+		$data = $crypt_obj->get_errors()->get_error_data( 'sodium_encrypt_error' );
+		$this->assertIsArray( $data );
+		$this->assertSame( 'api_secret', $data['context'] ?? null );
+	}
+
+	/**
+	 * Test that the report about a value, which has never been protected,
+	 * names the context it has been requested with.
+	 *
+	 * Such a value has been "encrypted" with an empty key by an older
+	 * version, see KeyProtection. Those versions knew no context - but
+	 * whoever is able to write to the database can create such a value for
+	 * any context, and the report should tell where it showed up.
+	 *
+	 * @return void
+	 */
+	public function test_unprotected_value_names_the_context(): void {
+		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
+		$crypt_obj->set_slug( 'context-unprotected-' . uniqid( '', true ) );
+		$crypt_obj->set_config(
+			array(
+				'force_method' => 'openssl',
+				'force_place'  => 'database',
+			)
+		);
+
+		// a key the older version could not decode, so it used an empty one.
+		define( strtoupper( $crypt_obj->get_slug() ) . '-HASH', 'My-own_secret key!2026' );
+
+		foreach ( array( '', 'api_secret' ) as $context ) {
+			$crypt_obj->clear_errors();
+
+			$iv    = random_bytes( 12 );
+			$tag   = '';
+			$raw   = (string) openssl_encrypt( 'old value', 'aes-256-gcm', '', OPENSSL_RAW_DATA, $iv, $tag, $context );
+			$value = base64_encode( base64_encode( $iv ) . ':' . base64_encode( $tag ) . ':' . base64_encode( $raw ) );
+
+			$this->assertSame( 'old value', $crypt_obj->decrypt( $value, $context ), 'Context: ' . $context );
+
+			$codes = $crypt_obj->get_errors()->get_error_codes();
+			$this->assertContains( 'openssl_unprotected_value', $codes, 'Context: ' . $context );
+
+			$data = $crypt_obj->get_errors()->get_error_data( 'openssl_unprotected_value' );
+			$this->assertIsArray( $data, 'Context: ' . $context );
+			$this->assertSame( $context, $data['context'] ?? null, 'Context: ' . $context );
+		}
+	}
+
+	/**
+	 * Test that a method which does not support a context names the context
+	 * it has refused.
+	 *
+	 * @return void
+	 */
+	public function test_unsupported_context_is_named_in_the_error(): void {
+		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
+		$crypt_obj->set_slug( 'context-legacy-error-' . uniqid( '', true ) );
+		$crypt_obj->set_config( array( 'force_place' => 'database' ) );
+
+		add_filter(
+			$crypt_obj->get_slug() . '_crypt_methods',
+			function () {
+				return array( 'CryptForWordPress\Tests\Fixtures\LegacyMethod' );
+			}
+		);
+
+		$this->assertSame( '', $crypt_obj->encrypt( 'Hallo World', 'api_secret' ) );
+
+		$data = $crypt_obj->get_errors()->get_error_data( 'context_not_supported' );
+		$this->assertIsArray( $data );
+		$this->assertSame( 'api_secret', $data['context'] ?? null );
+	}
+
+	/**
 	 * Test that a class extending a built-in method, which overrides
 	 * encrypt() and decrypt() with one parameter, keeps working - and that
 	 * its methods are the ones called.

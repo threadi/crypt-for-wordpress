@@ -57,7 +57,7 @@ class Plain extends Method_Base {
 	 *
 	 * @return string
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text ): string {
 		return $plain_text;
 	}
 
@@ -83,7 +83,7 @@ class Plain extends Method_Base {
 	 *
 	 * @return string
 	 */
-	public function encrypt_with_context( string $plain_text, string $context ): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassAfterLastUsed -- nothing is encrypted.
+	public function encrypt_with_context( #[\SensitiveParameter] string $plain_text, string $context ): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassAfterLastUsed -- nothing is encrypted.
 		return $this->encrypt( $plain_text );
 	}
 

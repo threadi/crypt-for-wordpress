@@ -130,7 +130,7 @@ class Method_Base {
 	 *
 	 * @return string
 	 */
-	public function encrypt( string $plain_text ): string {
+	public function encrypt( #[\SensitiveParameter] string $plain_text ): string {
 		if ( empty( $plain_text ) ) {
 			return $plain_text;
 		}
@@ -165,14 +165,14 @@ class Method_Base {
 	 *
 	 * @return string
 	 */
-	public function encrypt_with_context( string $plain_text, string $context ): string {
+	public function encrypt_with_context( #[\SensitiveParameter] string $plain_text, string $context ): string {
 		// without a context this is what it has always been.
 		if ( '' === $context ) {
 			return $this->encrypt( $plain_text );
 		}
 
 		// never ignore a context: the value would not be bound to it.
-		$this->report_unsupported_context();
+		$this->report_unsupported_context( $context );
 
 		return '';
 	}
@@ -192,7 +192,7 @@ class Method_Base {
 		}
 
 		// never ignore a context: the value cannot have been bound to it.
-		$this->report_unsupported_context();
+		$this->report_unsupported_context( $context );
 
 		return '';
 	}
@@ -200,14 +200,17 @@ class Method_Base {
 	/**
 	 * Report that this method cannot bind a value to a context.
 	 *
+	 * @param string $context The context which has been given.
+	 *
 	 * @return void
 	 */
-	private function report_unsupported_context(): void {
+	private function report_unsupported_context( string $context ): void {
 		$this->get_crypt_obj()->add_error(
 			'context_not_supported',
 			'The method used for encryption does not support binding a value to a context.',
 			array(
-				'method' => $this->get_name(),
+				'method'  => $this->get_name(),
+				'context' => $context,
 			)
 		);
 	}
@@ -253,7 +256,7 @@ class Method_Base {
 	 *
 	 * @return void
 	 */
-	protected function set_hash( string $hash ): void {
+	protected function set_hash( #[\SensitiveParameter] string $hash ): void {
 		$this->hash = $hash;
 	}
 
@@ -336,7 +339,7 @@ class Method_Base {
 	 *
 	 * @return string
 	 */
-	private function get_key_id( string $key_material ): string {
+	private function get_key_id( #[\SensitiveParameter] string $key_material ): string {
 		return substr( hash_hmac( 'sha256', 'crypt-for-wordpress-key-id', $key_material ), 0, 16 );
 	}
 
@@ -458,7 +461,7 @@ class Method_Base {
 	 *
 	 * @return bool
 	 */
-	private function is_known_key( string $key_material ): bool {
+	private function is_known_key( #[\SensitiveParameter] string $key_material ): bool {
 		$key_id = $this->get_key_id( $key_material );
 
 		foreach ( array( $this->get_site_key_id(), $this->get_network_key_id() ) as $known_key_id ) {
@@ -625,7 +628,7 @@ class Method_Base {
 	 *
 	 * @return bool
 	 */
-	protected function is_valid_stored_key( string $stored_key ): bool {
+	protected function is_valid_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
 		return '' !== $stored_key;
 	}
 
@@ -705,7 +708,7 @@ class Method_Base {
 	 *
 	 * @return bool
 	 */
-	protected function is_usable_stored_key( string $stored_key ): bool {
+	protected function is_usable_stored_key( #[\SensitiveParameter] string $stored_key ): bool {
 		return '' !== $stored_key;
 	}
 
@@ -723,7 +726,7 @@ class Method_Base {
 		$is_key_known = $this->is_any_key_known();
 		$first_found  = null;
 
-		foreach ( $this->get_crypt_obj()->get_stored_keys( $this->get_constant(), $include_active_place ) as $found ) {
+		foreach ( $this->get_stored_keys_of_places( $include_active_place ) as $found ) {
 			// use it if it is the known key - whatever it looks like: the
 			// configuration may have changed since it has been saved. A stored
 			// key is its own key material, see get_key_material().
@@ -752,6 +755,94 @@ class Method_Base {
 	}
 
 	/**
+	 * Return the keys the places hold, without loading them.
+	 *
+	 * @param bool $include_active_place False to skip the active place.
+	 *
+	 * @return array<int,array{place:Place_Base,key:string}>
+	 */
+	private function get_stored_keys_of_places( bool $include_active_place ): array {
+		// ask the Crypt object, if it is able to.
+		if ( ! $this->is_crypt_class_of_older_version() ) {
+			return $this->get_crypt_obj()->get_stored_keys( $this->get_constant(), $include_active_place );
+		}
+
+		// the Crypt class of version 3.1.0 cannot look into the places, but
+		// it hands them out - the ones a configured "force_place" does not hide.
+		$active_place_obj = $this->get_crypt_obj()->get_place();
+		$active_place     = $active_place_obj instanceof Place_Base ? $active_place_obj->get_name() : '';
+
+		$keys = array();
+		foreach ( $this->get_crypt_obj()->get_places_as_objects() as $place_obj ) {
+			// bail if this is the active place, and it should be skipped.
+			if ( ! $include_active_place && $place_obj->get_name() === $active_place ) {
+				continue;
+			}
+
+			// ask the place for the key it holds.
+			$place_obj->set_constant( $this->get_constant() );
+			$stored_key = $place_obj->get_stored_key();
+
+			if ( '' !== $stored_key ) {
+				$keys[] = array(
+					'place' => $place_obj,
+					'key'   => $stored_key,
+				);
+			}
+		}
+
+		return $keys;
+	}
+
+	/**
+	 * Return whether the configured place holds the current key.
+	 *
+	 * @return bool
+	 */
+	private function is_key_saved_in_place(): bool {
+		// ask the Crypt object, if it is able to.
+		if ( ! $this->is_crypt_class_of_older_version() ) {
+			return $this->get_crypt_obj()->is_saved_in_place( $this->get_constant(), $this->get_hash_value() );
+		}
+
+		// the Crypt class of version 3.1.0 cannot check this, but it hands out the place.
+		$place_obj = $this->get_crypt_obj()->get_place();
+
+		// bail if there is no place the key could have been saved in.
+		if ( ! $place_obj instanceof Place_Base ) {
+			return false;
+		}
+
+		// ask the place.
+		$place_obj->set_constant( $this->get_constant() );
+
+		return $place_obj->is_saved( $this->get_hash_value() );
+	}
+
+	/**
+	 * Return whether the Crypt class in use is the one of version 3.1.0 of
+	 * this package.
+	 *
+	 * Several plugins of a website may ship this package, in different
+	 * versions. PHP loads each class once, from whichever copy its
+	 * autoloader finds first - so the Crypt class of version 3.1.0, shipped
+	 * by a plugin which has not been updated yet, may end up working with
+	 * this class. The two things that Crypt class cannot do are done here
+	 * then, with what it offers. Without this the plugin which ships the
+	 * older version would stop with a fatal error.
+	 *
+	 * @return bool
+	 */
+	private function is_crypt_class_of_older_version(): bool {
+		// (for PHPStan there is only one Crypt class, which has both.)
+		if ( ! method_exists( $this->get_crypt_obj(), 'get_stored_keys' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return true;
+		}
+
+		return ! method_exists( $this->get_crypt_obj(), 'is_saved_in_place' ); // @phpstan-ignore function.alreadyNarrowedType
+	}
+
+	/**
 	 * Save the current key in the configured place and check that it really
 	 * arrived there.
 	 *
@@ -762,7 +853,7 @@ class Method_Base {
 		$this->get_crypt_obj()->save_in_place( $this->get_constant(), $this->get_hash_value() );
 
 		// do not trust the write: check that the place really holds the key.
-		if ( $this->get_crypt_obj()->is_saved_in_place( $this->get_constant(), $this->get_hash_value() ) ) {
+		if ( $this->is_key_saved_in_place() ) {
 			return true;
 		}
 
