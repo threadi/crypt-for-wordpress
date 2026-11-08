@@ -8,9 +8,10 @@ Without further configuration, when first loaded in a WordPress environment, the
 
 1. first in the **wp-config.php** file
 2. if this file is not writable, a Must-Use plugin is generated and stored
-3. if that also fails, the key is stored in the database. As the encrypted data resides there as well, this is reported as error `insecure_place_database`. Set `'block_database' => true` in the configuration to prevent it
-4. if the database is blocked, the key is derived from the WordPress salts. This is reported as error `insecure_place_wordpress_salts`. Set `'block_salts' => true` in the configuration to prevent it
-5. if no place is left, no key is stored and nothing is encrypted: `encrypt()` returns an empty string
+3. if that also fails, the key is saved as secret with the [Secrets API of WordPress](places/SecretsApi.md) (WordPress 7.2 or newer). If `WP_SECRETS_KEY` is defined or a drop-in of the hosting is used, this comes before the Must-Use plugin
+4. if that also fails, the key is stored in the database. As the encrypted data resides there as well, this is reported as error `insecure_place_database`. Set `'block_database' => true` in the configuration to prevent it
+5. if the database is blocked, the key is derived from the WordPress salts. This is reported as error `insecure_place_wordpress_salts`. Set `'block_salts' => true` in the configuration to prevent it. A salt which is still the placeholder of wp-config-sample.php is never used, reported as `wordpress_salts_placeholder`
+6. if no place is left, no key is stored and nothing is encrypted: `encrypt()` returns an empty string
 
 ### Hint
 
@@ -22,6 +23,7 @@ If you would like to keep the key separate from your database credentials, you c
 
 * the **wp-config.php** file
 * [a Must-Use plugin](places/MuPlugin.md)
+* [the Secrets API of WordPress](places/SecretsApi.md)
 * [a custom file](places/CustomFile.md)
 * [a server environment variable](places/ServerVariable.md)
 * [an environment variable](places/EnvironmentVariable.md)

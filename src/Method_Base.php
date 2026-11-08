@@ -599,6 +599,12 @@ class Method_Base {
 	 * @return void
 	 */
 	protected function report_missing_key(): void {
+		// bail if a place holds the key, but cannot hand it over right now:
+		// it is not missing. No new key is saved then, see store_new_key().
+		if ( $this->is_stored_key_unavailable() ) {
+			return;
+		}
+
 		// bail if no key has ever been used: this is the first usage.
 		if ( ! $this->is_any_key_known() ) {
 			return;
@@ -820,6 +826,32 @@ class Method_Base {
 	}
 
 	/**
+	 * Return whether a place holds a key for the constant of this method,
+	 * which it cannot hand over right now.
+	 *
+	 * @return bool
+	 */
+	private function is_stored_key_unavailable(): bool {
+		// ask the Crypt object, if it is able to.
+		if ( method_exists( $this->get_crypt_obj(), 'is_stored_key_unavailable' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return $this->get_crypt_obj()->is_stored_key_unavailable( $this->get_constant() );
+		}
+
+		// an older Crypt class hands out the places - the ones a configured
+		// "force_place" does not hide.
+		foreach ( $this->get_crypt_obj()->get_places_as_objects() as $place_obj ) {
+			$place_obj->set_constant( $this->get_constant() );
+
+			// (a place of an older copy of this package cannot tell.)
+			if ( method_exists( $place_obj, 'is_key_unavailable' ) && $place_obj->is_key_unavailable() ) { // @phpstan-ignore function.alreadyNarrowedType
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Return whether the Crypt class in use is the one of version 3.1.0 of
 	 * this package.
 	 *
@@ -881,6 +913,25 @@ class Method_Base {
 	 * @return bool True if the new key may be used.
 	 */
 	protected function store_new_key(): bool {
+		// bail if a place holds a key, which it cannot hand over right now:
+		// a new key would replace it - and with it every value encrypted so far.
+		if ( $this->is_stored_key_unavailable() ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'key_unavailable',
+				'The key for encryption exists, but its place cannot hand it over right now. No new key is generated. Nothing is encrypted or decrypted until the key is available again.',
+				array(
+					'method'   => $this->get_name(),
+					'constant' => $this->get_constant(),
+				)
+			);
+
+			// never work with a key that only exists during this request.
+			$this->set_hash( '' );
+
+			return false;
+		}
+
 		// claim the key first - of two processes generating a key at the same
 		// time only the one, which claimed it, is allowed to save its key.
 		$this->remember_key_id();

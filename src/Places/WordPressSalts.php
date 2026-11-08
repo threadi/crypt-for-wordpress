@@ -6,6 +6,9 @@
  * Salts might change. It is insecure to use this for encrypted data.
  * This is strictly not recommended.
  *
+ * A salt which is still the placeholder of wp-config-sample.php
+ * ("put your unique phrase here") is never used.
+ *
  * Configuration::
  * - 'force_place' => 'wordpress_salts', // not recommended.
  * - 'salt' => 'SECURE_AUTH_SALT', // the salt to use, as string name, defaults to "SECURE_AUTH_SALT".
@@ -53,7 +56,20 @@ class WordPressSalts extends Place_Base {
 	}
 
 	/**
+	 * The text wp-config-sample.php ships for every salt.
+	 *
+	 * A website still using it never had its salts generated. Every such
+	 * website shares this value: a key derived from it is known to anybody.
+	 *
+	 * @var string
+	 */
+	public const PLACEHOLDER = 'put your unique phrase here';
+
+	/**
 	 * Return whether this place could be used.
+	 *
+	 * Not if the configured salt is still the placeholder of
+	 * wp-config-sample.php: the key derived from it would be public.
 	 *
 	 * @return bool
 	 */
@@ -63,8 +79,58 @@ class WordPressSalts extends Place_Base {
 			return false;
 		}
 
-		// return whether the salt setting is a string.
-		return isset( $this->configuration['salt'] ) && is_string( $this->configuration['salt'] );
+		// bail if the salt setting is not a string.
+		if ( ! isset( $this->configuration['salt'] ) || ! is_string( $this->configuration['salt'] ) ) {
+			return false;
+		}
+
+		// bail if the configured salt is the placeholder.
+		if ( self::is_placeholder( $this->get_salt_value() ) ) {
+			// log this error - once, as this is asked repeatedly.
+			$errors = $this->get_crypt_obj()->get_errors();
+			if ( null === $errors || ! in_array( 'wordpress_salts_placeholder', $errors->get_error_codes(), true ) ) {
+				$this->get_crypt_obj()->add_error(
+					'wordpress_salts_placeholder',
+					'The WordPress salt to derive the key from is still the placeholder of wp-config-sample.php. A key derived from it would be known to anybody, so the salts are not used. Generate new salts for the wp-config.php.',
+					array(
+						'salt' => $this->configuration['salt'],
+					)
+				);
+			}
+
+			return false;
+		}
+
+		// usable.
+		return true;
+	}
+
+	/**
+	 * Return whether the given salt value is the placeholder of wp-config-sample.php.
+	 *
+	 * @param string $salt_value The value of the salt.
+	 *
+	 * @return bool
+	 */
+	public static function is_placeholder( #[\SensitiveParameter] string $salt_value ): bool {
+		return self::PLACEHOLDER === trim( $salt_value );
+	}
+
+	/**
+	 * Return the value of the configured salt constant, or an empty string.
+	 *
+	 * @return string
+	 */
+	private function get_salt_value(): string {
+		// bail if the configured salt does not exist.
+		if ( ! is_string( $this->configuration['salt'] ) || ! defined( $this->configuration['salt'] ) ) {
+			return '';
+		}
+
+		// get its value.
+		$salt_value = constant( $this->configuration['salt'] );
+
+		return is_string( $salt_value ) ? $salt_value : '';
 	}
 
 	/**
@@ -74,12 +140,11 @@ class WordPressSalts extends Place_Base {
 	 */
 	public function get_derived_key(): string {
 		// get the raw value of the configured salt constant.
-		$salt_value = ( is_string( $this->configuration['salt'] ) && defined( $this->configuration['salt'] ) )
-			? constant( $this->configuration['salt'] )
-			: '';
+		$salt_value = $this->get_salt_value();
 
-		// bail if the configured salt does not exist or is empty.
-		if ( empty( $salt_value ) ) {
+		// bail if the configured salt does not exist, is empty, or is the
+		// placeholder of wp-config-sample.php.
+		if ( '' === $salt_value || self::is_placeholder( $salt_value ) ) {
 			return '';
 		}
 

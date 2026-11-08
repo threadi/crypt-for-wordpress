@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.1.0] - Unreleased
+
+### Added
+
+- Added the place "secrets_api", which saves the key with the Secrets API of WordPress 7.2 or newer. It comes after the Must-Use plugin and before the database - or before the Must-Use plugin, if `WP_SECRETS_KEY` is defined or a drop-in of the hosting is used. It can be blocked with `'block_secrets_api' => true`
+- Added the filter `{slug}_crypt_secrets_api_name` for the name of the secret
+- Added `is_key_unavailable()` on places and `is_stored_key_unavailable()` on the Crypt object: a place can report that it holds a key, which it cannot hand over right now
+- Added the errors "key_unavailable", "secrets_api_unavailable", "secrets_api_withheld", "secrets_api_read_only", "secrets_api_not_saved" and "wordpress_salts_placeholder"
+- Added a section about the Secrets API of WordPress to the documentation of the security model
+
+### Changed
+
+- No new key is generated as long as a place holds a key, which it cannot hand over right now - in no place. `key_unavailable` is reported instead of `key_missing`, and the fingerprint of the known key is kept
+
+### Fixed
+
+- Fixed the WordPress salts being used as key, while the configured salt is still the placeholder of wp-config-sample.php ("put your unique phrase here"). The key derived from it is known to anybody. The place is not usable then, and `wordpress_salts_placeholder` is reported. Values written with such a key cannot be decrypted anymore - they never were protected
+
 ## [4.0.0] - 03.10.2026
 
 ### Added

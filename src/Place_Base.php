@@ -229,6 +229,22 @@ class Place_Base {
 	}
 
 	/**
+	 * Return whether this place holds a key for the constant, which it
+	 * cannot hand over right now - e.g., because the service behind it is
+	 * unreachable or the key cannot be decrypted.
+	 *
+	 * As long as any place reports this, no new key is generated: it would
+	 * replace the key all values have been encrypted with. Like
+	 * get_stored_key(), this is a lookup: it must not define, save or report
+	 * anything.
+	 *
+	 * @return bool
+	 */
+	public function is_key_unavailable(): bool {
+		return false;
+	}
+
+	/**
 	 * Return whether the key of this place is the same for every site of a
 	 * multisite network.
 	 *

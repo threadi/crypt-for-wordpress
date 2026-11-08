@@ -11,3 +11,5 @@ parameters:
      - %rootDir%/../../php-stubs/wp-cli-stubs/wp-cli-commands-stubs.php
      - %rootDir%/../../php-stubs/wp-cli-stubs/wp-cli-i18n-stubs.php
      - %rootDir%/../../php-stubs/wp-cli-stubs/wp-cli-tools-stubs.php
+     # Secrets API of WordPress 7.2 - remove once php-stubs/wordpress-stubs contains it.
+     - tests/stubs/secrets-api-stubs.php

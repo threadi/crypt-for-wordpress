@@ -8,6 +8,7 @@ When a key is used for the first time, a fingerprint of it is saved in the datab
 
 * **There never was a key.** A new one is generated and saved. Nothing is reported.
 * **There was a key, but it cannot be found.** A new one is generated and saved as well, so your plugin keeps working without asking anybody. But the error `key_missing` is reported: every value encrypted so far is unreadable.
+* **There is a key, but its place cannot hand it over right now** - e.g., the [Secrets API](places/SecretsApi.md) of WordPress cannot reach the service of the hosting. Then no new key is generated, in no place: it would replace the key of every value encrypted so far. The error `key_unavailable` is reported, and nothing is encrypted or decrypted until the key is available again.
 
 The same applies if a key is found which is not the one used so far: it is used, and `key_changed` is reported.
 
@@ -29,6 +30,7 @@ On a multisite network the fingerprint is saved where the key lives: for the who
 | `key_changed`           | A key has been found, which is not the one used so far. It is used from now on. Reported once.                    |
 | `key_not_saved`         | A new key could not be saved in its place. It is not used.                                                        |
 | `no_key_available`      | `encrypt()` or `decrypt()` has been called without a usable key. The cause has been reported before.              |
+| `key_unavailable`       | A place holds the key, but cannot hand it over right now (e.g., the [Secrets API](places/SecretsApi.md)). No new key is generated, nothing is encrypted. |
 | `key_in_inactive_place` | Warning: the key has been found in another place than the active one. It is used from there.                      |
 
 ## When does this happen?

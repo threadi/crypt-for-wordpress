@@ -8,6 +8,11 @@
 define( 'TESTS_PLUGIN_DIR', dirname( __DIR__ ) );
 define( 'UNIT_TESTS_DATA_PLUGIN_DIR', TESTS_PLUGIN_DIR . '/tests/Data/' ); // Customize.
 
+// A salt for the tests of the place "wordpress_salts". The wp-tests-config.php,
+// which bin/install-wp-tests.sh downloads, leaves every WordPress salt at the
+// placeholder "put your unique phrase here" - which this package never uses.
+define( 'CRYPT_FOR_WORDPRESS_TEST_SALT', 'c4Jx#9vQ!m2Lr@7tWz$Kp5^Ne8&Ya3*Hd6(Gs1)Fb0-Uq4+Ro7=Ti2' );
+
 // Define WP_CORE_DIR if not already defined
 if ( ! defined( 'WP_CORE_DIR' ) ) {
 	$_wp_core_dir = getenv( 'WP_CORE_DIR' );

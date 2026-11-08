@@ -86,6 +86,11 @@ PHP;
 	private function get_crypt( string $method, array $config = array() ): \CryptForWordPress\Crypt {
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 		$crypt_obj->set_slug( 'key-protection-' . $method . '-' . uniqid( '', true ) );
+		// the salts of the test environment may be the placeholder, which is never used.
+		if ( isset( $config['force_place'] ) && 'wordpress_salts' === $config['force_place'] && ! isset( $config['salt'] ) ) {
+			$config['salt'] = 'CRYPT_FOR_WORDPRESS_TEST_SALT';
+		}
+
 		$crypt_obj->set_config( array_merge( array( 'force_method' => $method ), $config ) );
 
 		return $crypt_obj;
@@ -511,6 +516,7 @@ PHP;
 			array(
 				'force_method' => 'openssl',
 				'force_place'  => 'wordpress_salts',
+				'salt'         => 'CRYPT_FOR_WORDPRESS_TEST_SALT',
 				'openssl'      => array( 'hash_type' => 'hash_pbkdf2' ),
 			)
 		);
