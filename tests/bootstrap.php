@@ -39,6 +39,9 @@ if ( ! file_exists( "{$_tests_dir}/includes/functions.php" ) ) {
 	exit( 1 );
 }
 
+// The configuration of the test environment - for tests running WordPress in a process of its own.
+define( 'CRYPT_FOR_WORDPRESS_TESTS_CONFIG', defined( 'WP_TESTS_CONFIG_FILE_PATH' ) ? WP_TESTS_CONFIG_FILE_PATH : "{$_tests_dir}/wp-tests-config.php" );
+
 // Give access to tests_add_filter() function.
 require_once "{$_tests_dir}/includes/functions.php";
 

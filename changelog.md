@@ -9,6 +9,10 @@
 - Added `is_key_unavailable()` on places and `is_stored_key_unavailable()` on the Crypt object: a place can report that it holds a key, which it cannot hand over right now
 - Added the errors "key_unavailable", "secrets_api_unavailable", "secrets_api_withheld", "secrets_api_read_only", "secrets_api_not_saved" and "wordpress_salts_placeholder"
 - Added a section about the Secrets API of WordPress to the documentation of the security model
+- Added test vectors: values of every format with fixed keys, which every later version has to decrypt
+- Added tests across two real requests, for robustness against arbitrary input, and for many error cases
+- Added the Composer scripts "test-multisite", "test-all", "test-coverage", "test-coverage-multisite" and "phpstan"
+- Added WordPress 6.9, latest and nightly, and a multisite run of every combination to the tests on GitHub
 
 ### Changed
 
@@ -16,6 +20,8 @@
 
 ### Fixed
 
+- Fixed the Must-Use plugin never being used, if the directory for "must-use"-plugins did not exist yet - as on most new installations. The key was saved in the next place instead. The directory is created now, if its parent directory is writable. A key saved in another place before is still found there
+- Fixed the fallback ChaCha20-Poly1305 of Sodium, used on servers without XChaCha20-Poly1305: it used a nonce of 8 instead of 12 bytes, so nothing could be encrypted or decrypted with it. No value can have been written with it
 - Fixed the WordPress salts being used as key, while the configured salt is still the placeholder of wp-config-sample.php ("put your unique phrase here"). The key derived from it is known to anybody. The place is not usable then, and `wordpress_salts_placeholder` is reported. Values written with such a key cannot be decrypted anymore - they never were protected
 
 ## [4.0.0] - 03.10.2026

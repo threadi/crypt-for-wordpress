@@ -407,4 +407,63 @@ class SecretsApi extends CryptForWordPressTests {
 		$this->assertSame( 'abcdef0123456789', get_option( $this->crypt_obj->get_slug() . '_crypt_key_id_sodium' ) );
 		$this->assertSame( 'not a secret record', get_option( \WP_Secrets_Option_Store::SITE_PREFIX . $name ) );
 	}
+
+	/**
+	 * Test that on a multisite network every site has a secret of its own.
+	 *
+	 * @return void
+	 */
+	public function test_multisite_every_site_has_its_own_secret(): void {
+		$this->skipWithoutMultisite();
+
+		$other_site = self::factory()->blog->create();
+		$constant   = $this->get_sodium_constant();
+
+		$this->get_place( $constant )->save( 'key-of-this-site' );
+
+		switch_to_blog( $other_site );
+		$on_other_site = $this->get_place( $constant );
+		$before        = $on_other_site->get_stored_key();
+		$on_other_site->save( 'key-of-the-other-site' );
+		$after = $on_other_site->get_stored_key();
+		restore_current_blog();
+
+		$this->assertSame( '', $before );
+		$this->assertSame( 'key-of-the-other-site', $after );
+		$this->assertSame( 'key-of-this-site', $this->get_place( $constant )->get_stored_key() );
+	}
+
+	/**
+	 * Test that a key generated on a switched site is saved on that site,
+	 * together with its fingerprint - and that nothing of it is left on the
+	 * site the request started on.
+	 *
+	 * @return void
+	 */
+	public function test_multisite_key_of_a_switched_site_stays_there(): void {
+		$this->skipWithoutMultisite();
+
+		$other_site = self::factory()->blog->create();
+		$this->crypt_obj->set_config(
+			array(
+				'force_method' => 'sodium',
+				'force_place'  => 'secrets_api',
+			)
+		);
+		$key_id_option = $this->crypt_obj->get_slug() . '_crypt_key_id_sodium';
+		$name          = $this->get_place( $this->get_sodium_constant() )->get_secret_name();
+
+		switch_to_blog( $other_site );
+		$encrypted    = $this->crypt_obj->encrypt( 'Hallo World' );
+		$secret_there = wp_get_secret( $name );
+		$key_id_there = get_option( $key_id_option );
+		restore_current_blog();
+
+		$this->assertNotSame( '', $encrypted );
+		$this->assertInstanceOf( \WP_Secret::class, $secret_there );
+		$this->assertNotEmpty( $key_id_there );
+
+		$this->assertNull( wp_get_secret( $name ) );
+		$this->assertFalse( get_option( $key_id_option ) );
+	}
 }

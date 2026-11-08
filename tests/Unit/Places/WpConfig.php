@@ -268,4 +268,148 @@ PHP;
 			remove_filter( 'filesystem_method', $use_fixture );
 		}
 	}
+
+	/**
+	 * Run the given callback with the filesystem fixture, which treats chosen
+	 * paths as not writable or lets writes fail.
+	 *
+	 * @param array<int,string> $read_only_paths Paths, which are not writable.
+	 * @param array<int,string> $failing_writes  Paths (or their beginning), to which writes fail.
+	 * @param callable          $callback        The callback.
+	 *
+	 * @return void
+	 */
+	private function with_fixture_filesystem( array $read_only_paths, array $failing_writes, callable $callback ): void {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
+		if ( ! class_exists( 'WP_Filesystem_ReadOnlyDir', false ) ) {
+			class_alias( ReadOnlyDirFilesystem::class, 'WP_Filesystem_ReadOnlyDir' );
+		}
+
+		$use_fixture = fn() => 'ReadOnlyDir';
+		add_filter( 'filesystem_method', $use_fixture );
+		ReadOnlyDirFilesystem::$read_only_paths = $read_only_paths;
+		ReadOnlyDirFilesystem::$failing_writes  = $failing_writes;
+
+		try {
+			$callback();
+		} finally {
+			ReadOnlyDirFilesystem::$read_only_paths = array();
+			ReadOnlyDirFilesystem::$failing_writes  = array();
+			remove_filter( 'filesystem_method', $use_fixture );
+		}
+	}
+
+	/**
+	 * Test that save() inserts the constant right after the opening PHP tag
+	 * of an old wp-config.php without the ABSPATH-check block - and that the
+	 * result is still valid PHP.
+	 *
+	 * @return void
+	 */
+	public function test_save_into_old_wp_config_without_abspath_check(): void {
+		file_put_contents( $this->fake_wp_config_path, "<?php\ndefine( 'DB_NAME', 'test_db' );\nrequire_once ABSPATH . 'wp-settings.php';\n" );
+
+		$place    = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$constant = 'WP_CONFIG_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) );
+		$place->set_constant( $constant );
+		$place->save( 'unit-test-hash-value' );
+
+		$content = (string) file_get_contents( $this->fake_wp_config_path );
+
+		$this->assertStringStartsWith( "<?php\ndefine( '" . $constant . "', 'unit-test-hash-value' );", $content );
+		$this->assertStringContainsString( "define( 'DB_NAME', 'test_db' );", $content );
+		$this->assertTrue( $place->is_saved( 'unit-test-hash-value' ) );
+
+		// the result is valid PHP.
+		$tokens = token_get_all( $content, TOKEN_PARSE );
+		$this->assertNotEmpty( $tokens );
+	}
+
+	/**
+	 * Test that save() leaves an empty wp-config.php alone and reports it.
+	 *
+	 * @return void
+	 */
+	public function test_save_into_empty_wp_config_is_reported(): void {
+		file_put_contents( $this->fake_wp_config_path, '' );
+
+		$place = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$place->set_constant( 'WP_CONFIG_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) ) );
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertSame( '', file_get_contents( $this->fake_wp_config_path ) );
+		$this->assertContains( 'wpconfig_php_no_content', $this->crypt_obj->get_errors()->get_error_codes() );
+	}
+
+	/**
+	 * Test that the key is still saved, if the lock file cannot be created -
+	 * and that this is reported.
+	 *
+	 * @return void
+	 */
+	public function test_save_without_lock_file_is_reported(): void {
+		$place = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$place->set_constant( 'WP_CONFIG_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) ) );
+
+		$this->with_fixture_filesystem(
+			array( dirname( $this->fake_wp_config_path ) ),
+			array(),
+			static function () use ( $place ) {
+				$place->save( 'unit-test-hash-value' );
+			}
+		);
+
+		$this->assertContains( 'wpconfig_lock_not_writable', $this->crypt_obj->get_errors()->get_error_codes() );
+		$this->assertTrue( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertFileDoesNotExist( $this->fake_wp_config_path . '.lock' );
+	}
+
+	/**
+	 * Test that a failing write leaves the wp-config.php as it is and is
+	 * reported - and no temporary file is left behind.
+	 *
+	 * @return void
+	 */
+	public function test_failing_write_leaves_wp_config_unchanged(): void {
+		$place = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$place->set_constant( 'WP_CONFIG_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) ) );
+
+		$this->with_fixture_filesystem(
+			array(),
+			array( $this->fake_wp_config_path . '.tmp-' ),
+			static function () use ( $place ) {
+				$place->save( 'unit-test-hash-value' );
+			}
+		);
+
+		$this->assertSame( self::FAKE_WP_CONFIG_CONTENT, file_get_contents( $this->fake_wp_config_path ) );
+		$this->assertContains( 'wpconfig_php_could_not_write', $this->crypt_obj->get_errors()->get_error_codes() );
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertSame( array(), (array) glob( $this->fake_wp_config_path . '.tmp-*' ) );
+	}
+
+	/**
+	 * Test that uninstall() leaves a wp-config.php, which is not writable,
+	 * as it is and reports it.
+	 *
+	 * @return void
+	 */
+	public function test_uninstall_with_read_only_wp_config_is_reported(): void {
+		$place    = new \CryptForWordPress\Places\WpConfig( $this->crypt_obj );
+		$constant = 'WP_CONFIG_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) );
+		$place->set_constant( $constant );
+		$place->save( 'unit-test-hash-value' );
+
+		$this->with_fixture_filesystem(
+			array( $this->fake_wp_config_path ),
+			array(),
+			static function () use ( $place, $constant ) {
+				$place->uninstall( $constant );
+			}
+		);
+
+		$this->assertTrue( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertContains( 'wpconfig_php_could_not_write', $this->crypt_obj->get_errors()->get_error_codes() );
+	}
 }

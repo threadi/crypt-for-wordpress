@@ -158,4 +158,31 @@ class ServerVariable extends CryptForWordPressTests {
 		$this->assertTrue( $this->crypt_obj->has_errors() );
 		$this->assertContains( 'server_variable_missing_in_server', $this->crypt_obj->get_errors()->get_error_codes() );
 	}
+
+	/**
+	 * Test that load() logs an error if the configured name is not a string.
+	 *
+	 * @return void
+	 */
+	public function test_load_logs_error_when_name_is_not_a_string(): void {
+		$place = new \CryptForWordPress\Places\ServerVariable( $this->crypt_obj );
+		$place->set_config( array( 'server_variable' => array( 'NOT_A_STRING' ) ) );
+
+		$place->load();
+
+		$this->assertContains( 'server_variable_not_a_string', $this->crypt_obj->get_errors()->get_error_codes() );
+	}
+
+	/**
+	 * Test that this place never confirms a saved key: nothing can be saved
+	 * in a variable of the hosting, so a key generated here is never used.
+	 *
+	 * @return void
+	 */
+	public function test_is_saved_never_confirms_a_key(): void {
+		$place = new \CryptForWordPress\Places\ServerVariable( $this->crypt_obj );
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
+	}
 }

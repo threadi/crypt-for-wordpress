@@ -8,6 +8,7 @@
 namespace CryptForWordPress\Tests\Unit\Places;
 
 use CryptForWordPress\Tests\CryptForWordPressTests;
+use CryptForWordPress\Tests\Fixtures\ReadOnlyDirFilesystem;
 
 /**
  * Object to test the CustomFile place.
@@ -300,5 +301,99 @@ class CustomFile extends CryptForWordPressTests {
 			$is_valid = false;
 		}
 		$this->assertTrue( $is_valid );
+	}
+
+	/**
+	 * Test that load() logs an error if no path is configured.
+	 *
+	 * @return void
+	 */
+	public function test_load_logs_error_when_path_not_given(): void {
+		$place = new \CryptForWordPress\Places\CustomFile( $this->crypt_obj );
+
+		$place->load();
+
+		$this->assertContains( 'custom_file_path_not_given', $this->crypt_obj->get_errors()->get_error_codes() );
+	}
+
+	/**
+	 * Test that load() logs an error if the configured path is not a string.
+	 *
+	 * @return void
+	 */
+	public function test_load_logs_error_when_path_is_not_a_string(): void {
+		$place = new \CryptForWordPress\Places\CustomFile( $this->crypt_obj );
+		$place->set_config( array( 'custom_file_path' => array( '/tmp/a-file.php' ) ) );
+
+		$place->load();
+
+		$this->assertContains( 'custom_file_path_is_not_a_string', $this->crypt_obj->get_errors()->get_error_codes() );
+	}
+
+	/**
+	 * Test that load() never includes a file via a stream wrapper - and that
+	 * such a path is never taken as holding a key.
+	 *
+	 * @return void
+	 */
+	public function test_stream_wrapper_path_is_never_loaded(): void {
+		$place = new \CryptForWordPress\Places\CustomFile( $this->crypt_obj );
+		$place->set_config( array( 'custom_file_path' => 'php://filter/resource=' . __FILE__ ) );
+		$place->set_constant( 'CUSTOM_FILE_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) ) );
+
+		$place->load();
+
+		$this->assertContains( 'custom_file_wrong_path', $this->crypt_obj->get_errors()->get_error_codes() );
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertSame( '', $place->get_stored_key() );
+	}
+
+	/**
+	 * Test that save() does nothing - and does not fail - if the configured
+	 * path is not a string.
+	 *
+	 * @return void
+	 */
+	public function test_save_with_path_which_is_not_a_string(): void {
+		$place = new \CryptForWordPress\Places\CustomFile( $this->crypt_obj );
+		$place->set_config( array( 'custom_file_path' => array( '/tmp/a-file.php' ) ) );
+		$place->set_constant( 'CUSTOM_FILE_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) ) );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
+	}
+
+	/**
+	 * Test that a failing write is reported and the key is not taken as saved.
+	 *
+	 * @return void
+	 */
+	public function test_failing_write_is_reported(): void {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
+		if ( ! class_exists( 'WP_Filesystem_ReadOnlyDir', false ) ) {
+			class_alias( ReadOnlyDirFilesystem::class, 'WP_Filesystem_ReadOnlyDir' );
+		}
+
+		$path  = $this->get_temp_file_path();
+		$place = new \CryptForWordPress\Places\CustomFile( $this->crypt_obj );
+		$place->set_config( array( 'custom_file_path' => $path ) );
+		$place->set_constant( 'CUSTOM_FILE_TEST_' . strtoupper( str_replace( '.', '', uniqid( '', true ) ) ) );
+
+		$use_fixture = fn() => 'ReadOnlyDir';
+		add_filter( 'filesystem_method', $use_fixture );
+		ReadOnlyDirFilesystem::$failing_writes = array( $path );
+
+		try {
+			$place->save( 'unit-test-hash-value' );
+		} finally {
+			ReadOnlyDirFilesystem::$failing_writes = array();
+			remove_filter( 'filesystem_method', $use_fixture );
+		}
+
+		$this->assertContains( 'custom_file_write_failed', $this->crypt_obj->get_errors()->get_error_codes() );
+		$this->assertFileDoesNotExist( $path );
+		$this->assertFalse( $place->is_saved( 'unit-test-hash-value' ) );
 	}
 }

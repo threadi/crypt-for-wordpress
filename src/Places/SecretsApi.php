@@ -112,6 +112,76 @@ class SecretsApi extends Place_Base {
 	}
 
 	/**
+	 * Return whether the Secrets API can be used by this object.
+	 *
+	 * The calls to the Secrets API are in methods of their own, so tests can
+	 * replace them - WordPress keeps its provider for the whole request.
+	 *
+	 * @return bool
+	 */
+	protected function is_available(): bool {
+		return self::is_api_available();
+	}
+
+	/**
+	 * Return the secret with the given name: wp_get_secret().
+	 *
+	 * @param string $name The name of the secret.
+	 *
+	 * @return WP_Secret|WP_Error|null
+	 */
+	protected function api_get( string $name ): WP_Secret|WP_Error|null {
+		$secret = wp_get_secret( $name );
+
+		return $secret instanceof WP_Secret || $secret instanceof WP_Error ? $secret : null;
+	}
+
+	/**
+	 * Save a secret: wp_set_secret().
+	 *
+	 * @param string $name  The name of the secret.
+	 * @param string $value The value.
+	 *
+	 * @return true|WP_Error
+	 */
+	protected function api_set( string $name, #[\SensitiveParameter] string $value ): true|WP_Error {
+		$result = wp_set_secret( $name, $value );
+
+		return $result instanceof WP_Error ? $result : true;
+	}
+
+	/**
+	 * Delete a secret: wp_delete_secret().
+	 *
+	 * @param string $name The name of the secret.
+	 *
+	 * @return void
+	 */
+	protected function api_delete( string $name ): void {
+		wp_delete_secret( $name );
+	}
+
+	/**
+	 * Return the secrets of the given namespace: wp_list_secrets().
+	 *
+	 * @param string $secret_namespace The namespace.
+	 *
+	 * @return array<int,mixed>|WP_Error
+	 */
+	protected function api_list( string $secret_namespace ): array|WP_Error {
+		return wp_list_secrets( $secret_namespace );
+	}
+
+	/**
+	 * Return whether the provider accepts new secrets: wp_secrets_provider_is_writable().
+	 *
+	 * @return bool
+	 */
+	protected function api_is_writable(): bool {
+		return wp_secrets_provider_is_writable();
+	}
+
+	/**
 	 * Return whether the usage of this place is blocked by the configuration.
 	 *
 	 * @return bool
@@ -136,17 +206,17 @@ class SecretsApi extends Place_Base {
 		}
 
 		// bail if the Secrets API is not available.
-		if ( ! self::is_api_available() ) {
+		if ( ! $this->is_available() ) {
 			return false;
 		}
 
 		// usable if a new key could be saved.
-		if ( wp_secrets_provider_is_writable() ) {
+		if ( $this->api_is_writable() ) {
 			return true;
 		}
 
 		// a read-only provider is usable only if it holds a secret of this plugin already.
-		$secrets = wp_list_secrets( $this->get_secret_namespace() );
+		$secrets = $this->api_list( $this->get_secret_namespace() );
 
 		return is_array( $secrets ) && ! empty( $secrets );
 	}
@@ -232,14 +302,7 @@ class SecretsApi extends Place_Base {
 		}
 
 		// get the secret.
-		$secret = wp_get_secret( $this->get_secret_name() );
-
-		// return it, if it is one of the three states WordPress defines.
-		if ( $secret instanceof WP_Secret || $secret instanceof WP_Error ) {
-			return $secret;
-		}
-
-		return null;
+		return $this->api_get( $this->get_secret_name() );
 	}
 
 	/**
@@ -263,7 +326,7 @@ class SecretsApi extends Place_Base {
 	 */
 	public function load(): void {
 		// bail if this place cannot be used.
-		if ( $this->is_blocked() || ! self::is_api_available() ) {
+		if ( $this->is_blocked() || ! $this->is_available() ) {
 			return;
 		}
 
@@ -335,12 +398,12 @@ class SecretsApi extends Place_Base {
 	 */
 	public function save( #[\SensitiveParameter] string $hash ): void {
 		// bail if this place cannot be used.
-		if ( $this->is_blocked() || ! self::is_api_available() || '' === $this->get_constant() ) {
+		if ( $this->is_blocked() || ! $this->is_available() || '' === $this->get_constant() ) {
 			return;
 		}
 
 		// bail if the hosting manages the secrets itself.
-		if ( ! wp_secrets_provider_is_writable() ) {
+		if ( ! $this->api_is_writable() ) {
 			// log this error.
 			$this->get_crypt_obj()->add_error(
 				'secrets_api_read_only',
@@ -372,7 +435,7 @@ class SecretsApi extends Place_Base {
 		}
 
 		// save the hash as secret.
-		$result = wp_set_secret( $this->get_secret_name(), $hash );
+		$result = $this->api_set( $this->get_secret_name(), $hash );
 
 		// bail if it could not be saved.
 		if ( $result instanceof WP_Error ) {
@@ -396,7 +459,7 @@ class SecretsApi extends Place_Base {
 	 */
 	public function is_saved( #[\SensitiveParameter] string $hash ): bool {
 		// bail if nothing could have been saved.
-		if ( '' === $hash || $this->is_blocked() || ! self::is_api_available() ) {
+		if ( '' === $hash || $this->is_blocked() || ! $this->is_available() ) {
 			return false;
 		}
 
@@ -414,7 +477,7 @@ class SecretsApi extends Place_Base {
 	 */
 	public function get_stored_key(): string {
 		// bail if this place cannot be used.
-		if ( $this->is_blocked() || ! self::is_api_available() ) {
+		if ( $this->is_blocked() || ! $this->is_available() ) {
 			return '';
 		}
 
@@ -434,7 +497,7 @@ class SecretsApi extends Place_Base {
 	 */
 	public function is_key_unavailable(): bool {
 		// bail if this place cannot be used.
-		if ( $this->is_blocked() || ! self::is_api_available() ) {
+		if ( $this->is_blocked() || ! $this->is_available() ) {
 			return false;
 		}
 
@@ -463,12 +526,12 @@ class SecretsApi extends Place_Base {
 	 */
 	public function uninstall( string $constant ): void {
 		// bail if the Secrets API is not available, or the hosting manages it.
-		if ( ! self::is_api_available() || ! wp_secrets_provider_is_writable() ) {
+		if ( ! $this->is_available() || ! $this->api_is_writable() ) {
 			return;
 		}
 
 		// remove the secret.
 		$this->set_constant( $constant );
-		wp_delete_secret( $this->get_secret_name() );
+		$this->api_delete( $this->get_secret_name() );
 	}
 }

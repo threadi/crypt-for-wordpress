@@ -1,9 +1,23 @@
 {
   "name": "threadi/crypt-for-wordpress",
-  "version": "4.1.0",
+  "version": "4.0.0",
   "license": "GPL-3.0-or-later",
   "scripts": {
+    "phpstan": "vendor/bin/phpstan clear-result-cache && vendor/bin/phpstan analyse",
     "test": "phpunit",
+    "test-multisite": [
+      "@putenv WP_MULTISITE=1",
+      "phpunit"
+    ],
+    "test-all": [
+      "@test",
+      "@test-multisite"
+    ],
+    "test-coverage": "php -d pcov.enabled=1 -d pcov.directory=src vendor/bin/phpunit --coverage-filter src --coverage-text",
+    "test-coverage-multisite": [
+      "@putenv WP_MULTISITE=1",
+      "php -d pcov.enabled=1 -d pcov.directory=src vendor/bin/phpunit --coverage-filter src --coverage-text"
+    ],
     "test-install": "bash bin/install-wp-tests.sh wordpress_test root 'debian' 127.0.0.1 latest",
     "test-install-during-build": "bash bin/install-wp-tests.sh wordpress_test root 'debian' 127.0.0.1 latest false true"
   },
