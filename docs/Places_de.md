@@ -8,9 +8,10 @@ Ohne weitere Konfiguration, versucht die _Crypt for WordPress_-Bibliothek beim e
 
 1. zuerst in der Datei `wp-config.php`
 2. ist diese nicht beschreibbar, wird ein Must-Use-Plugin erzeugt und dieses gespeichert
-3. wenn auch das nicht geht, wird der Schlüssel in der Datenbank gespeichert. Da dort auch die verschlüsselten Daten liegen, wird das als Fehler `insecure_place_database` gemeldet. Setze `'block_database' => true` in der Konfiguration, um das zu verhindern
-4. ist die Datenbank blockiert, wird der Schlüssel aus den WordPress-Salts abgeleitet. Das wird als Fehler `insecure_place_wordpress_salts` gemeldet. Setze `'block_salts' => true` in der Konfiguration, um das zu verhindern
-5. bleibt kein Speicherort übrig, wird kein Schlüssel gespeichert und nichts verschlüsselt: `encrypt()` liefert einen leeren String
+3. wenn auch das nicht geht, wird der Schlüssel als Secret über die [Secrets API von WordPress](places/SecretsApi_de.md) gespeichert (ab WordPress 7.2). Ist `WP_SECRETS_KEY` definiert oder wird ein Drop-in des Hosters genutzt, kommt das vor dem Must-Use-Plugin
+4. wenn auch das nicht geht, wird der Schlüssel in der Datenbank gespeichert. Da dort auch die verschlüsselten Daten liegen, wird das als Fehler `insecure_place_database` gemeldet. Setze `'block_database' => true` in der Konfiguration, um das zu verhindern
+5. ist die Datenbank blockiert, wird der Schlüssel aus den WordPress-Salts abgeleitet. Das wird als Fehler `insecure_place_wordpress_salts` gemeldet. Setze `'block_salts' => true` in der Konfiguration, um das zu verhindern. Ein Salt, der noch der Platzhalter aus der wp-config-sample.php ist, wird nie verwendet, gemeldet als `wordpress_salts_placeholder`
+6. bleibt kein Speicherort übrig, wird kein Schlüssel gespeichert und nichts verschlüsselt: `encrypt()` liefert einen leeren String
 
 ### Hinweis:
 
@@ -22,6 +23,7 @@ Wenn du den Schlüssel getrennt von den Datenbankzugangsdaten aufbewahren möcht
 
 * die Datei `wp-config.php`
 * [ein Must-Use-Plugin](places/MuPlugin_de.md)
+* [die Secrets API von WordPress](places/SecretsApi_de.md)
 * [eine individuelle Datei](places/CustomFile_de.md)
 * [eine Serverumgebungsvariable](places/ServerVariable_de.md)
 * [eine Umgebungsvariable](places/EnvironmentVariable_de.md)

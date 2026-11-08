@@ -11,8 +11,11 @@ _Crypt for WordPress_ encrypts values before they are saved in the database. The
 
 All of this only holds as long as the key is not in the database as well:
 
-* The place `database` is used if neither the `wp-config.php` nor a Must-Use plugin can be written. It is reported as `insecure_place_database`. Set `'block_database' => true` in the configuration to never use it. The WordPress salts are the next place then, reported as `insecure_place_wordpress_salts` and blocked with `'block_salts' => true`.
+* Since WordPress 7.2, the key is saved with the [Secrets API of WordPress](places/SecretsApi.md) if the `wp-config.php` cannot be written. It is in the database then, but encrypted by WordPress with a key from the `wp-config.php` (`WP_SECRETS_KEY`, or the salts) or of the hosting. The database alone is not enough to read it.
+* The place `database` is used if neither the `wp-config.php`, a Must-Use plugin nor the Secrets API can be used. It is reported as `insecure_place_database`. Set `'block_database' => true` in the configuration to never use it. The WordPress salts are the next place then, reported as `insecure_place_wordpress_salts` and blocked with `'block_salts' => true`. A salt, which is still the placeholder of wp-config-sample.php, is never used: the key derived from it would be known to anybody (`wordpress_salts_placeholder`).
 * `uninstall()` keeps the key in the database (options `{slug}_hash` and `{slug}_sodium_hash`), so the values are still readable if the plugin is installed again. Delete these options if you do not want that.
+
+If a place holds the key, but cannot hand it over - e.g., the Secrets API cannot reach the service of the hosting -, no new key is generated. `key_unavailable` is reported and nothing is encrypted until the key is available again. A temporary outage never replaces the key of your values.
 
 ## Not protected
 
@@ -27,3 +30,33 @@ All of this only holds as long as the key is not in the database as well:
 * Only encrypt what your plugin has to read again. What it only has to compare - like a password - should be hashed instead.
 * Do not log decrypted values and do not print them into forms. Show a placeholder instead.
 * If other plugins on the same website may use this package as well: [give your plugin its own copy](MultiplePlugins.md).
+* On WordPress 7.2 or newer: recommend your users to define `WP_SECRETS_KEY` in the `wp-config.php`. Without it, the Secrets API depends on the WordPress salts.
+
+## The Secrets API of WordPress or Crypt for WordPress?
+
+Since version 7.2, WordPress has a [Secrets API](https://make.wordpress.org/core/2026/08/25/proposal-a-secrets-api-for-wordpress-7-2/) of its own. It protects against the same threats as this package - the database in the wrong hands, and not code in the same WordPress. Both have their purpose:
+
+**Use the Secrets API directly** for single credentials of your plugin, if it requires WordPress 7.2: an API key, a token, the password for an external service.
+
+```
+wp_set_secret( 'my-plugin/api-key', $api_key );
+
+$secret  = wp_get_secret( 'my-plugin/api-key' ); // WP_Secret, null (none) or WP_Error (unavailable).
+$api_key = $secret instanceof WP_Secret ? $secret->reveal() : null;
+if ( ! is_string( $api_key ) ) {
+    // none saved yet, or not available right now - never save a new one in the latter case.
+}
+```
+
+The hosting can keep these secrets in a key management service, old values remain available during a rotation, `WP_Secret` masks the value in logs and dumps, and the Site Health of WordPress reports secrets which cannot be decrypted.
+
+**Use Crypt for WordPress** for anything else:
+
+* many values or records, e.g. personal data of applicants or customers - the Secrets API saves every secret as its own option and is meant for credentials,
+* values in post meta, user meta, term meta or custom tables of your plugin,
+* values which are bound to what they belong to, with a [context](Context.md),
+* plugins which support WordPress versions before 7.2.
+
+**Both together**: since WordPress 7.2, this package saves its own key with the Secrets API, if the `wp-config.php` cannot be written - see [Places](Places.md).
+
+Do not encrypt twice: never hand a value encrypted by this package to `wp_set_secret()` or `wp_import_option_as_secret()`. The secret would be the encrypted value, readable only with the key of this package. Decrypt it first, save the plain value as secret, and delete the option afterward.

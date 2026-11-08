@@ -37,6 +37,7 @@ class Crypt {
 		'Methods/Plain.php',
 		'Places/WpConfig.php',
 		'Places/MuPlugin.php',
+		'Places/SecretsApi.php',
 		'Places/Database.php',
 		'Places/CustomFile.php',
 		'Places/EnvironmentVariable.php',
@@ -338,6 +339,33 @@ class Crypt {
 		}
 
 		return $keys;
+	}
+
+	/**
+	 * Return whether any place holds a key for the given constant, which it
+	 * cannot hand over right now.
+	 *
+	 * No new key may be generated then: it would replace the key all values
+	 * have been encrypted with. This is only a lookup: nothing is defined,
+	 * saved or reported here.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $constant The constant the key would be defined as.
+	 *
+	 * @return bool
+	 */
+	public function is_stored_key_unavailable( string $constant ): bool {
+		foreach ( $this->get_place_objects( true ) as $place_obj ) {
+			$place_obj->set_constant( $constant );
+
+			// (a place of an older copy of this package cannot tell.)
+			if ( method_exists( $place_obj, 'is_key_unavailable' ) && $place_obj->is_key_unavailable() ) { // @phpstan-ignore function.alreadyNarrowedType
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -666,12 +694,28 @@ class Crypt {
 		$places = array(
 			'CryptForWordPress\Places\WpConfig',
 			'CryptForWordPress\Places\MuPlugin',
+			'CryptForWordPress\Places\SecretsApi',
 			'CryptForWordPress\Places\Database',
 			'CryptForWordPress\Places\CustomFile',
 			'CryptForWordPress\Places\EnvironmentVariable',
 			'CryptForWordPress\Places\ServerVariable',
 			'CryptForWordPress\Places\WordPressSalts',
 		);
+
+		// prefer the Secrets API of WordPress over the Must-Use plugin, if it
+		// does not depend on the WordPress salts.
+		if ( class_exists( 'CryptForWordPress\Places\SecretsApi' ) && Places\SecretsApi::has_dedicated_key_source() ) {
+			$places = array(
+				'CryptForWordPress\Places\WpConfig',
+				'CryptForWordPress\Places\SecretsApi',
+				'CryptForWordPress\Places\MuPlugin',
+				'CryptForWordPress\Places\Database',
+				'CryptForWordPress\Places\CustomFile',
+				'CryptForWordPress\Places\EnvironmentVariable',
+				'CryptForWordPress\Places\ServerVariable',
+				'CryptForWordPress\Places\WordPressSalts',
+			);
+		}
 
 		$slug = $this->get_slug();
 		/**

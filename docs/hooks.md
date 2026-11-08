@@ -135,6 +135,27 @@ Version | Description
 
 Source: [src/Places/Database.php](Places/Database.php), [line 63](Places/Database.php#L63-L69)
 
+### `{$slug}_crypt_secrets_api_name`
+
+*Filter the name of the secret holding the key.*
+
+Changing it later is like a lost key: the secret saved under the former name is not found anymore.
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$secret_name` | `string` | The name of the secret ("namespace/key").
+`$constant` | `string` | The constant the key is used as.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`4.1.0` | Available since 4.1.0.
+
+Source: [src/Places/SecretsApi.php](Places/SecretsApi.php), [line 176](Places/SecretsApi.php#L166-L176)
+
 ### `{$slug}_crypt_constant`
 
 *Filter the name of the constant.*

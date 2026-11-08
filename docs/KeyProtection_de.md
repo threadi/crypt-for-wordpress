@@ -8,6 +8,7 @@ Wird ein Schlüssel zum ersten Mal verwendet, wird ein Fingerabdruck davon in de
 
 * **Es gab noch nie einen Schlüssel.** Ein neuer wird erzeugt und gespeichert. Es wird nichts gemeldet.
 * **Es gab einen Schlüssel, aber er ist nicht auffindbar.** Auch dann wird ein neuer erzeugt und gespeichert, damit dein Plugin weiterarbeitet, ohne dass jemand gefragt wird. Es wird aber der Fehler `key_missing` gemeldet: Alle bisher verschlüsselten Werte sind unlesbar.
+* **Es gibt einen Schlüssel, aber sein Speicherort kann ihn gerade nicht herausgeben** - z.B. erreicht die [Secrets API](places/SecretsApi_de.md) von WordPress den Dienst des Hosters nicht. Dann wird kein neuer Schlüssel erzeugt, an keinem Speicherort: Er würde den Schlüssel aller bisher verschlüsselten Werte ersetzen. Es wird der Fehler `key_unavailable` gemeldet, und es wird nichts ver- oder entschlüsselt, bis der Schlüssel wieder verfügbar ist.
 
 Dasselbe gilt, wenn ein Schlüssel gefunden wird, der nicht der bisher verwendete ist: Er wird benutzt, und `key_changed` wird gemeldet.
 
@@ -29,6 +30,7 @@ In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schl
 | `key_changed`           | Es wurde ein Schlüssel gefunden, der nicht der bisher verwendete ist. Er wird ab jetzt benutzt. Wird einmal gemeldet.        |
 | `key_not_saved`         | Ein neuer Schlüssel konnte nicht an seinem Speicherort gespeichert werden. Er wird nicht benutzt.                            |
 | `no_key_available`      | `encrypt()` oder `decrypt()` wurde ohne nutzbaren Schlüssel aufgerufen. Die Ursache wurde zuvor gemeldet.                    |
+| `key_unavailable`       | Ein Speicherort enthält den Schlüssel, kann ihn aber gerade nicht herausgeben (z.B. die [Secrets API](places/SecretsApi_de.md)). Es wird kein neuer Schlüssel erzeugt, nichts verschlüsselt. |
 | `key_in_inactive_place` | Warnung: Der Schlüssel wurde an einem anderen als dem aktiven Speicherort gefunden. Er wird von dort genutzt.                |
 
 ## Wann passiert das?

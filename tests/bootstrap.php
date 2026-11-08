@@ -8,6 +8,11 @@
 define( 'TESTS_PLUGIN_DIR', dirname( __DIR__ ) );
 define( 'UNIT_TESTS_DATA_PLUGIN_DIR', TESTS_PLUGIN_DIR . '/tests/Data/' ); // Customize.
 
+// A salt for the tests of the place "wordpress_salts". The wp-tests-config.php,
+// which bin/install-wp-tests.sh downloads, leaves every WordPress salt at the
+// placeholder "put your unique phrase here" - which this package never uses.
+define( 'CRYPT_FOR_WORDPRESS_TEST_SALT', 'c4Jx#9vQ!m2Lr@7tWz$Kp5^Ne8&Ya3*Hd6(Gs1)Fb0-Uq4+Ro7=Ti2' );
+
 // Define WP_CORE_DIR if not already defined
 if ( ! defined( 'WP_CORE_DIR' ) ) {
 	$_wp_core_dir = getenv( 'WP_CORE_DIR' );
@@ -33,6 +38,9 @@ if ( ! file_exists( "{$_tests_dir}/includes/functions.php" ) ) {
 	echo "Could not find {$_tests_dir}/includes/functions.php, have you run bin/install-wp-tests.sh ?" . PHP_EOL; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	exit( 1 );
 }
+
+// The configuration of the test environment - for tests running WordPress in a process of its own.
+define( 'CRYPT_FOR_WORDPRESS_TESTS_CONFIG', defined( 'WP_TESTS_CONFIG_FILE_PATH' ) ? WP_TESTS_CONFIG_FILE_PATH : "{$_tests_dir}/wp-tests-config.php" );
 
 // Give access to tests_add_filter() function.
 require_once "{$_tests_dir}/includes/functions.php";

@@ -52,13 +52,27 @@ class WordPressSalts extends CryptForWordPressTests {
     }
 
     /**
-     * Test that this place is usable by default (the default 'salt' configuration is a valid string).
+     * Test that this place is usable with a salt, which is not the placeholder.
      *
      * @return void
      */
-    public function test_usable_by_default(): void {
+    public function test_usable_with_a_real_salt(): void {
         $place = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
+        $place->set_config( array( 'salt' => 'CRYPT_FOR_WORDPRESS_TEST_SALT' ) );
         $this->assertTrue( $place->is_usable() );
+    }
+
+    /**
+     * Test that this place is usable by default (SECURE_AUTH_SALT) - unless
+     * the test environment leaves it at the placeholder.
+     *
+     * @return void
+     */
+    public function test_usable_by_default_unless_placeholder(): void {
+        $place    = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
+        $is_dummy = defined( 'SECURE_AUTH_SALT' ) && \CryptForWordPress\Places\WordPressSalts::is_placeholder( (string) SECURE_AUTH_SALT );
+
+        $this->assertSame( ! $is_dummy, $place->is_usable() );
     }
 
     /**
@@ -107,13 +121,10 @@ class WordPressSalts extends CryptForWordPressTests {
      * @return void
      */
     public function test_load_with_defined_salt_constant(): void {
-        if ( ! defined( 'SECURE_AUTH_SALT' ) || empty( SECURE_AUTH_SALT ) ) {
-            $this->markTestSkipped( 'SECURE_AUTH_SALT is not defined in this test environment.' );
-        }
-
         $place = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
+        $place->set_config( array( 'salt' => 'CRYPT_FOR_WORDPRESS_TEST_SALT' ) );
 
-        $expected = hash_hkdf( 'sha256', SECURE_AUTH_SALT, 32, $this->crypt_obj->get_slug() . '-wordpress-salts' );
+        $expected = hash_hkdf( 'sha256', CRYPT_FOR_WORDPRESS_TEST_SALT, 32, $this->crypt_obj->get_slug() . '-wordpress-salts' );
 
         $this->assertSame( $expected, $place->get_derived_key() );
         $this->assertSame( 32, strlen( $place->get_derived_key() ) );
@@ -139,11 +150,6 @@ class WordPressSalts extends CryptForWordPressTests {
      * @return void
      */
     public function test_encrypt_decrypt_with_forced_wordpress_salts(): void {
-        // bail if this WordPress test environment does not define SECURE_AUTH_SALT.
-        if ( ! defined( 'SECURE_AUTH_SALT' ) || empty( SECURE_AUTH_SALT ) ) {
-            $this->markTestSkipped( 'SECURE_AUTH_SALT is not defined in this test environment.' );
-        }
-
         // opt in, exactly like a consuming plugin would via its own filter.
         add_filter(
             $this->crypt_obj->get_slug() . '_places',
@@ -152,7 +158,12 @@ class WordPressSalts extends CryptForWordPressTests {
                 return $places;
             }
         );
-        $this->crypt_obj->set_config( array( 'force_place' => 'wordpress_salts' ) );
+        $this->crypt_obj->set_config(
+            array(
+                'force_place' => 'wordpress_salts',
+                'salt'        => 'CRYPT_FOR_WORDPRESS_TEST_SALT',
+            )
+        );
 
         // confirm the forced place actually resolves to our class.
         $place = $this->crypt_obj->get_place();
@@ -171,5 +182,64 @@ class WordPressSalts extends CryptForWordPressTests {
         // the insecurity warning must have been logged along the way.
         $this->assertTrue( $this->crypt_obj->has_errors() );
         $this->assertContains( 'insecure_place_wordpress_salts', $this->crypt_obj->get_errors()->get_error_codes() );
+    }
+
+    /**
+     * Test that a salt, which is still the placeholder of wp-config-sample.php,
+     * makes this place unusable and is reported once.
+     *
+     * @return void
+     */
+    public function test_placeholder_salt_is_unusable(): void {
+        if ( ! defined( 'CRYPT_FOR_WORDPRESS_TEST_PLACEHOLDER_SALT' ) ) {
+            define( 'CRYPT_FOR_WORDPRESS_TEST_PLACEHOLDER_SALT', 'put your unique phrase here' );
+        }
+
+        $place = new \CryptForWordPress\Places\WordPressSalts( $this->crypt_obj );
+        $place->set_config( array( 'salt' => 'CRYPT_FOR_WORDPRESS_TEST_PLACEHOLDER_SALT' ) );
+
+        $this->assertFalse( $place->is_usable() );
+        $this->assertFalse( $place->is_usable() );
+        $this->assertSame( '', $place->get_derived_key() );
+
+        $codes = $this->crypt_obj->get_errors()->get_error_codes();
+        $this->assertContains( 'wordpress_salts_placeholder', $codes );
+        $this->assertCount( 1, $this->crypt_obj->get_errors()->get_error_messages( 'wordpress_salts_placeholder' ) );
+    }
+
+    /**
+     * Test that the placeholder is recognized with surrounding whitespace as
+     * well, and that other values are not taken for it.
+     *
+     * @return void
+     */
+    public function test_placeholder_detection(): void {
+        $this->assertTrue( \CryptForWordPress\Places\WordPressSalts::is_placeholder( 'put your unique phrase here' ) );
+        $this->assertTrue( \CryptForWordPress\Places\WordPressSalts::is_placeholder( ' put your unique phrase here ' ) );
+        $this->assertFalse( \CryptForWordPress\Places\WordPressSalts::is_placeholder( 'put your unique phrase here!' ) );
+        $this->assertFalse( \CryptForWordPress\Places\WordPressSalts::is_placeholder( '' ) );
+    }
+
+    /**
+     * Test that nothing is encrypted with a key derived from the placeholder,
+     * if the place is forced.
+     *
+     * @return void
+     */
+    public function test_placeholder_salt_encrypts_nothing(): void {
+        if ( ! defined( 'CRYPT_FOR_WORDPRESS_TEST_PLACEHOLDER_SALT' ) ) {
+            define( 'CRYPT_FOR_WORDPRESS_TEST_PLACEHOLDER_SALT', 'put your unique phrase here' );
+        }
+
+        $this->crypt_obj->set_config(
+            array(
+                'force_method' => 'sodium',
+                'force_place'  => 'wordpress_salts',
+                'salt'         => 'CRYPT_FOR_WORDPRESS_TEST_PLACEHOLDER_SALT',
+            )
+        );
+
+        $this->assertSame( '', $this->crypt_obj->encrypt( 'secret value' ) );
+        $this->assertContains( 'wordpress_salts_placeholder', $this->crypt_obj->get_errors()->get_error_codes() );
     }
 }

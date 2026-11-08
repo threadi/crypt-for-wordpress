@@ -130,11 +130,12 @@ This package support the following places:
 | Place               | Default Order | Description                                                  |
 |---------------------|---------------|--------------------------------------------------------------|
 | CustomFile          |               | Use a custom file to store the key.                          |
-| Database            | 3             | Save the key in the WordPress-own database - not recommended |
+| Database            | 4             | Save the key in the WordPress-own database - not recommended |
 | EnvironmentVariable |               | Use an $_ENV variable in your hosting for the key.           |
-| MuPlugin            | 2             | Let us create an custom "must-use"-plugin to save the key.   |
+| MuPlugin            | 2 (or 3)      | Let us create an custom "must-use"-plugin to save the key.   |
+| SecretsApi          | 3 (or 2)      | Save the key as secret with the Secrets API of WordPress 7.2+. Before MuPlugin if `WP_SECRETS_KEY` or a drop-in is used. |
 | ServerVariable      |               | Use an $_SERVER variable in your hosting for the key.        |
-| WordPressSalts      |               | Use a WordPress Salts as key.                                |
+| WordPressSalts      | 5             | Use a WordPress Salts as key - not recommended. Never a salt which is still the placeholder. |
 | WpConfig            | 1             | Let us save the key in your wp-config.php                    |
 
 You can add more placed as described [here](docs/Places.md).

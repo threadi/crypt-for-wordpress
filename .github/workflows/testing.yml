@@ -24,11 +24,16 @@ jobs:
         run: vendor/bin/phpcs -p src --standard=PHPCompatibilityWP --runtime-set testVersion 8.2-
 
   build:
-    name: Run PHP Unit tests
+    name: PHP ${{ matrix.php-version }}, WordPress ${{ matrix.wp-version }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         php-version: [ '8.5', '8.4', '8.3', '8.2' ]
+        # 6.9: without the Secrets API of WordPress.
+        # latest: the current release.
+        # nightly: the next release - with the Secrets API since 7.2.
+        wp-version: [ '6.9', 'latest', 'nightly' ]
     services:
       database:
         image: mysql:latest
@@ -41,22 +46,63 @@ jobs:
       - name: Check out source code
         uses: actions/checkout@v7
 
-      - name: Install dependencies
-        run: composer install
-
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
           tools: phpunit-polyfills:1.1
-          extensions: mbstring, xml, zip, intl, pdo, mysql
+          extensions: mbstring, xml, zip, intl, pdo, mysql, sodium
           coverage: none
+
+      - name: Install dependencies
+        run: composer install
 
       - name: Install SVN
         run: sudo apt-get update && sudo apt-get install -y subversion
 
       - name: Setup tests
-        run: bash bin/install-wp-tests.sh wordpress_tests root root 127.0.0.1 latest true
+        run: bash bin/install-wp-tests.sh wordpress_tests root root 127.0.0.1 ${{ matrix.wp-version }} true
 
-      - name: Run tests
+      - name: Run tests (single site)
         run: composer test
+
+      - name: Run tests (multisite)
+        run: composer test-multisite
+
+  coverage:
+    name: Code coverage
+    runs-on: ubuntu-latest
+    services:
+      database:
+        image: mysql:latest
+        env:
+          MYSQL_DATABASE: wordpress_tests
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: phpunit-polyfills:1.1
+          extensions: mbstring, xml, zip, intl, pdo, mysql, sodium
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer install
+
+      - name: Install SVN
+        run: sudo apt-get update && sudo apt-get install -y subversion
+
+      - name: Setup tests
+        run: bash bin/install-wp-tests.sh wordpress_tests root root 127.0.0.1 nightly true
+
+      - name: Coverage (single site)
+        run: composer test-coverage
+
+      - name: Coverage (multisite)
+        run: composer test-coverage-multisite

@@ -133,7 +133,7 @@ PHP;
 		$origins = $this->get_class_origins( '' );
 
 		// the Crypt class and all the others.
-		$this->assertCount( 14, $origins );
+		$this->assertCount( 15, $origins );
 		$this->assertSame( array( 'own' ), array_values( array_unique( $origins ) ), (string) wp_json_encode( $origins ) );
 	}
 
