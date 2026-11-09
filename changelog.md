@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.2] - 09.11.2026
+
+### Fixed
+
+- Fixed version number in release
+
 ## [4.1.1] - 09.11.2026
 
 ### Fixed
