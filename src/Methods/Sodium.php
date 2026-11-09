@@ -233,7 +233,7 @@ class Sodium extends Method_Base {
 	 * Poly1305-IETF (safe default, no hardware dependency) >
 	 * ChaCha20-Poly1305-IETF (legacy fallback).
 	 *
-	 * @return int One of the self::ALGO_* constants.
+	 * @return self::ALGO_* One of the self::ALGO_* constants.
 	 */
 	private function detect_algorithm(): int {
 		// use aegis256.

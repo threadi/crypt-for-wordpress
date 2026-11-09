@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.1] - 09.11.2026
+
+### Fixed
+
+- Fixed Sodium detection of algorithm 
+
 ## [4.1.0] - 09.11.2026
 
 ### Added
