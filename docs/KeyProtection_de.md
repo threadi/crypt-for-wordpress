@@ -16,9 +16,9 @@ Beide Fehler werden **einmal** gemeldet - in dem Request, der es bemerkt. Danach
 
 Bevor ein Schlüssel als fehlend behandelt wird, werden die anderen unterstützten Speicherorte danach durchsucht - nicht nur der aktive. Ein in der Datenbank oder in einer individuellen Datei gespeicherter Schlüssel wird also auch dann noch gefunden, wenn die wp-config.php inzwischen beschreibbar ist. Er wird von dort genutzt, wo er liegt, und die Warnung `key_in_inactive_place` wird gemeldet.
 
-Ein neuer Schlüssel wird erst verwendet, wenn er an seinem Speicherort angekommen ist. Schlägt das Speichern fehl, wird nichts verschlüsselt: `encrypt()` liefert einen leeren String und `key_not_saved` wird gemeldet. Ein Wert, der mit einem nur für einen Request existierenden Schlüssel verschlüsselt wurde, wäre nie wieder lesbar.
+Ein neuer Schlüssel wird erst verwendet, wenn er an seinem Speicherort angekommen ist. Schlägt das Speichern am aktiven Speicherort fehl, wird der nächste nutzbare versucht (Warnung `key_saved_in_fallback_place`, siehe [Speicherorte](Places_de.md)). Schlägt es überall fehl, wird nichts verschlüsselt: `encrypt()` liefert einen leeren String und `key_not_saved` wird gemeldet. Ein Wert, der mit einem nur für einen Request existierenden Schlüssel verschlüsselt wurde, wäre nie wieder lesbar.
 
-In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schlüssel liegt: netzwerkweit, wenn der Schlüssel in einer Datei oder Variablen liegt, pro Website, wenn er in der Datenbank liegt.
+In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schlüssel liegt: netzwerkweit, wenn der Schlüssel in einer Datei oder Variablen liegt, pro Website, wenn er in der Datenbank liegt. Das gilt auch für einen Schlüssel, der an einem ausweichenden Speicherort gelandet ist.
 
 `uninstall()` behält den Schlüssel in der Datenbank, damit eine spätere Installation die vorhandenen Werte wieder lesen kann - egal, wo der Schlüssel gespeichert war. Gibt es keinen Schlüssel zum Aufbewahren, wird auch der Fingerabdruck entfernt.
 
@@ -32,6 +32,7 @@ In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schl
 | `no_key_available`      | `encrypt()` oder `decrypt()` wurde ohne nutzbaren Schlüssel aufgerufen. Die Ursache wurde zuvor gemeldet.                    |
 | `key_unavailable`       | Ein Speicherort enthält den Schlüssel, kann ihn aber gerade nicht herausgeben (z.B. die [Secrets API](places/SecretsApi_de.md)). Es wird kein neuer Schlüssel erzeugt, nichts verschlüsselt. |
 | `key_in_inactive_place` | Warnung: Der Schlüssel wurde an einem anderen als dem aktiven Speicherort gefunden. Er wird von dort genutzt.                |
+| `key_saved_in_fallback_place` | Warnung: Ein neuer Schlüssel konnte nicht am aktiven Speicherort gespeichert werden und liegt stattdessen am nächsten nutzbaren. Die Daten nennen `failed_places` und `saved_in`. |
 
 ## Wann passiert das?
 

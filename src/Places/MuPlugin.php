@@ -143,10 +143,38 @@ class MuPlugin extends Place_Base {
 	/**
 	 * Return the mu plugin filename.
 	 *
+	 * The name is the slug - unless the slug contains a path. That is the
+	 * case for a file, which is not part of a plugin (e.g. of a theme): its
+	 * slug is the path of its directory. Used as it is, the file would be
+	 * expected in subdirectories of the "must-use"-plugin-directory, which do
+	 * not exist - and WordPress would not load it from there anyway. The
+	 * separators are replaced then, and whatever is not allowed in a file
+	 * name is removed.
+	 *
+	 * Every other slug is used unchanged, even if it is not a clean file
+	 * name: a file saved under it before has to be found under the same name
+	 * again. Otherwise WordPress would still load the former file, while
+	 * this place would write and delete another one.
+	 *
 	 * @return string
 	 */
 	private function get_mu_plugin_filename(): string {
-		return $this->get_crypt_obj()->get_slug() . '-hash.php';
+		$slug = $this->get_crypt_obj()->get_slug();
+
+		// use the slug unchanged, if it is no path.
+		if ( ! str_contains( $slug, '/' ) && ! str_contains( $slug, '\\' ) ) {
+			return $slug . '-hash.php';
+		}
+
+		// turn the path into one file name.
+		$file_name = sanitize_file_name( str_replace( array( '/', '\\' ), '-', trim( $slug, '/\\' ) ) );
+
+		// use a name derived from the slug, if nothing is left of it.
+		if ( '' === $file_name ) {
+			$file_name = 'crypt-' . md5( $slug );
+		}
+
+		return $file_name . '-hash.php';
 	}
 
 	/**
