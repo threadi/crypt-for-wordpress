@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.2.0] - 12.11.2026
+
+### Added
+
+- Added the warning "key_saved_in_fallback_place": a new key, which could not be saved in the active place, has been saved in the next usable one
+- Added `get_saved_place()` on the Crypt object
+- Added tests for the fallback to the next place and for the file name of the Must-Use plugin
+
+### Changed
+
+- If saving a new key in the active place fails, it is saved in the next usable place of the order, instead of nothing being encrypted. Places, which cannot save anything, are never used for this, and a configured "force_place" leaves no fallback. If the key ends up in the database, `insecure_place_database` is reported. On a multisite network its fingerprint follows it, e.g. from the network to the site, if it ends up in the database
+
+### Fixed
+
+- Fixed the Must-Use plugin being written into subdirectories of the "must-use"-plugin-directory, if the slug contains a path - as for a file, which is not part of a plugin. The write failed, and WordPress would not have loaded the file from there anyway. The separators are replaced now. Every other slug keeps its file name
+
 ## [4.1.2] - 09.11.2026
 
 ### Fixed

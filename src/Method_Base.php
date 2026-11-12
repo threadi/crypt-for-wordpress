@@ -886,6 +886,9 @@ class Method_Base {
 
 		// do not trust the write: check that the place really holds the key.
 		if ( $this->is_key_saved_in_place() ) {
+			// the key may have been saved in another place than the active one.
+			$this->follow_saved_place();
+
 			return true;
 		}
 
@@ -900,6 +903,59 @@ class Method_Base {
 		);
 
 		return false;
+	}
+
+	/**
+	 * Move the fingerprint of the current key to where the key has been
+	 * saved, if that is not where the active place keeps it.
+	 *
+	 * If saving in the active place fails, the key is saved in the next
+	 * usable place. On a multisite network that place may keep its key for
+	 * another scope - e.g. the database for one site only, while the
+	 * "must-use"-plugin keeps it for the whole network. The fingerprint has
+	 * already been remembered for the scope of the active place. Left there,
+	 * every other site would find a fingerprint of the network, but no key -
+	 * and report it as missing.
+	 *
+	 * @return void
+	 */
+	private function follow_saved_place(): void {
+		// bail if the Crypt class cannot tell (an older copy of this package).
+		if ( ! method_exists( $this->get_crypt_obj(), 'get_saved_place' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return;
+		}
+
+		// get the place the key has been saved in.
+		$place_obj = $this->get_crypt_obj()->get_saved_place( $this->get_constant() );
+
+		// bail if it is unknown, or it keeps its key for the same scope as the active place.
+		if ( ! $place_obj instanceof Place_Base || $place_obj->is_network_wide() === $this->key_is_network_wide ) {
+			return;
+		}
+
+		// bail on a single site: there is only one scope.
+		if ( ! is_multisite() ) {
+			$this->key_is_network_wide = $place_obj->is_network_wide();
+			return;
+		}
+
+		// forget the fingerprint where it has been remembered - only if it is
+		// the one of this key: anything else is not ours to remove.
+		$key_id = $this->get_key_id( $this->get_key_material() );
+		if ( $this->is_key_id_network_wide() ) {
+			if ( hash_equals( $this->get_network_key_id(), $key_id ) ) {
+				delete_site_option( $this->get_key_id_option_name() );
+			}
+		} elseif ( hash_equals( $this->get_site_key_id(), $key_id ) ) {
+			delete_option( $this->get_key_id_option_name() );
+		}
+
+		// remember it where the key lives now.
+		$this->key_is_network_wide = $place_obj->is_network_wide();
+		if ( ! $this->key_is_network_wide ) {
+			self::register_per_site_constant( $this->get_constant() );
+		}
+		$this->remember_key_id();
 	}
 
 	/**

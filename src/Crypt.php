@@ -96,6 +96,14 @@ class Crypt {
 	private array $configuration = array();
 
 	/**
+	 * The places save_in_place() has saved a hash in during this request,
+	 * per constant.
+	 *
+	 * @var array<string,Place_Base>
+	 */
+	private array $saved_places = array();
+
+	/**
 	 * List of errors.
 	 *
 	 * @var WP_Error|null
@@ -814,38 +822,96 @@ class Crypt {
 	/**
 	 * Save the given hash in the constant on the configured place.
 	 *
+	 * The places are tried in their order, beginning with the active one.
+	 * Whether a place is usable is only an estimate - the write itself can
+	 * still fail, e.g. because the disk is full, "open_basedir" forbids it
+	 * or the filesystem is accessed via FTP. The hash is then saved in the
+	 * next usable place, as if the failed one had not been usable at all.
+	 * A write is only trusted once the place confirms it holds the hash.
+	 *
+	 * Places, which cannot save anything (environment or server variable,
+	 * WordPress salts), never confirm a write, so they are never used here.
+	 * A configured "force_place" leaves only that one place to try.
+	 *
+	 * A hash saved in another place than the active one is found there with
+	 * the next request, as every place a hash can be saved in is either
+	 * loaded by WordPress itself (wp-config.php, "must-use"-plugin) or is
+	 * searched for a key (see get_stored_keys()).
+	 *
 	 * @param string $constant The constant to use.
 	 * @param string $hash The hash to use.
 	 * @return void
 	 */
 	public function save_in_place( string $constant, #[\SensitiveParameter] string $hash ): void {
-		// get the place to use.
-		$place_obj = $this->get_place();
+		// forget where a former hash for this constant has been saved.
+		unset( $this->saved_places[ $constant ] );
 
-		// bail if no place could be loaded.
-		if ( ! $place_obj instanceof Place_Base ) {
-			// log this error.
-			$this->add_error(
-				'save_place_not_available',
-				'Could not find any place to save the key for encryption.'
-			);
+		// try the usable places in their order.
+		$failed_places = array();
+		foreach ( $this->get_places_as_objects() as $place_obj ) {
+			// bail if the place is unusable.
+			if ( ! $place_obj->is_usable() ) {
+				continue;
+			}
+
+			// Set configuration.
+			$place_obj->set_constant( $constant );
+
+			// save the hash in the place.
+			$place_obj->save( $hash );
+
+			// bail if the place does not hold the hash: try the next one.
+			if ( ! $place_obj->is_saved( $hash ) ) {
+				$failed_places[] = $place_obj->get_name();
+				continue;
+			}
+
+			// remember the place holding the hash.
+			$this->saved_places[ $constant ] = $place_obj;
+
+			// report that the hash is not where it should be.
+			if ( ! empty( $failed_places ) ) {
+				$this->add_error(
+					'key_saved_in_fallback_place',
+					'The key for encryption could not be saved in the active place. It has been saved in the next usable place instead.',
+					array(
+						'failed_places' => $failed_places,
+						'saved_in'      => $place_obj->get_name(),
+					)
+				);
+
+				// the database holds the encrypted values as well: never let this pass silently.
+				if ( 'database' === $place_obj->get_name() ) {
+					$this->add_error(
+						'insecure_place_database',
+						'Keys and encrypted data are stored in the same data source: your projects database. This is insecure and must be addressed.'
+					);
+				}
+			}
 
 			// do nothing more.
 			return;
 		}
 
-		// Set configuration.
-		$place_obj->set_constant( $constant );
+		// bail if a place has been tried: the method reports the failed save.
+		if ( ! empty( $failed_places ) ) {
+			return;
+		}
 
-		// save the hash in the place.
-		$place_obj->save( $hash );
+		// log this error.
+		$this->add_error(
+			'save_place_not_available',
+			'Could not find any place to save the key for encryption.'
+		);
 	}
 
 	/**
-	 * Return whether the configured place holds the given hash in the constant.
+	 * Return whether the place, the given hash has been saved in, holds it
+	 * in the constant.
 	 *
 	 * Used right after save_in_place(): write is not trusted until the
-	 * place confirms it.
+	 * place confirms it. That is the place save_in_place() has used - which
+	 * may be another one than the active place, if saving there failed.
 	 *
 	 * @internal Used for internal tasks.
 	 *
@@ -854,8 +920,11 @@ class Crypt {
 	 * @return bool
 	 */
 	public function is_saved_in_place( string $constant, #[\SensitiveParameter] string $hash ): bool {
-		// get the place to use.
-		$place_obj = $this->get_place();
+		// get the place the hash has been saved in, or the active one.
+		$place_obj = $this->get_saved_place( $constant );
+		if ( ! $place_obj instanceof Place_Base ) {
+			$place_obj = $this->get_place();
+		}
 
 		// bail if no place could be loaded.
 		if ( ! $place_obj instanceof Place_Base ) {
@@ -867,6 +936,19 @@ class Crypt {
 
 		// ask the place.
 		return $place_obj->is_saved( $hash );
+	}
+
+	/**
+	 * Return the place save_in_place() has saved the hash for the given
+	 * constant in during this request - or false, if it has saved none.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $constant The constant to use.
+	 * @return false|Place_Base
+	 */
+	public function get_saved_place( string $constant ): false|Place_Base {
+		return $this->saved_places[ $constant ] ?? false;
 	}
 
 	/**

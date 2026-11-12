@@ -13,6 +13,8 @@ Without further configuration, when first loaded in a WordPress environment, the
 5. if the database is blocked, the key is derived from the WordPress salts. This is reported as error `insecure_place_wordpress_salts`. Set `'block_salts' => true` in the configuration to prevent it. A salt which is still the placeholder of wp-config-sample.php is never used, reported as `wordpress_salts_placeholder`
 6. if no place is left, no key is stored and nothing is encrypted: `encrypt()` returns an empty string
 
+Whether a place is usable is only estimated beforehand - e.g. by whether a directory is writable. If saving fails all the same (a full disk, `open_basedir`, a filesystem accessed via FTP), the key is saved in the next usable place of this order. This is reported as warning `key_saved_in_fallback_place` - and, if it ends up in the database, as `insecure_place_database` as well. With the next requests it is found there (warning `key_in_inactive_place`). Places which cannot save anything (environment and server variable, WordPress salts) are never used for this. If a place is forced with `force_place`, there is no fallback.
+
 ### Hint
 
 By default, the key is stored in **wp-config.php**—this works without any additional configuration and is enough for most purposes.

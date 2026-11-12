@@ -16,9 +16,9 @@ Both errors are reported **once** - in the request that notices it. From then on
 
 Before a key is treated as missing, the other supported places are searched for it - not only the active one. A key that has been saved in the database or in a custom file is still found after the wp-config.php became writable. It is used from where it is, and the warning `key_in_inactive_place` is reported.
 
-A new key is only used once it has been saved in its place. If saving fails, nothing is encrypted: `encrypt()` returns an empty string and `key_not_saved` is reported. A value encrypted with a key that only exists during one request could never be read again.
+A new key is only used once it has been saved in its place. If saving in the active place fails, the next usable one is tried (warning `key_saved_in_fallback_place`, see [Places](Places.md)). If it fails everywhere, nothing is encrypted: `encrypt()` returns an empty string and `key_not_saved` is reported. A value encrypted with a key that only exists during one request could never be read again.
 
-On a multisite network the fingerprint is saved where the key lives: for the whole network if the key is in a file or a variable, per site if it is in the database.
+On a multisite network the fingerprint is saved where the key lives: for the whole network if the key is in a file or a variable, per site if it is in the database. This also applies to a key, which has ended up in a fallback place.
 
 `uninstall()` keeps the key in the database, so a later installation can read the existing values again - wherever the key has been saved. If there is no key to keep, the fingerprint is removed as well.
 
@@ -32,6 +32,7 @@ On a multisite network the fingerprint is saved where the key lives: for the who
 | `no_key_available`      | `encrypt()` or `decrypt()` has been called without a usable key. The cause has been reported before.              |
 | `key_unavailable`       | A place holds the key, but cannot hand it over right now (e.g., the [Secrets API](places/SecretsApi.md)). No new key is generated, nothing is encrypted. |
 | `key_in_inactive_place` | Warning: the key has been found in another place than the active one. It is used from there.                      |
+| `key_saved_in_fallback_place` | Warning: a new key could not be saved in the active place and has been saved in the next usable one instead. The data holds `failed_places` and `saved_in`. |
 
 ## When does this happen?
 

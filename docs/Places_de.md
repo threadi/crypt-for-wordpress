@@ -13,6 +13,8 @@ Ohne weitere Konfiguration, versucht die _Crypt for WordPress_-Bibliothek beim e
 5. ist die Datenbank blockiert, wird der Schlüssel aus den WordPress-Salts abgeleitet. Das wird als Fehler `insecure_place_wordpress_salts` gemeldet. Setze `'block_salts' => true` in der Konfiguration, um das zu verhindern. Ein Salt, der noch der Platzhalter aus der wp-config-sample.php ist, wird nie verwendet, gemeldet als `wordpress_salts_placeholder`
 6. bleibt kein Speicherort übrig, wird kein Schlüssel gespeichert und nichts verschlüsselt: `encrypt()` liefert einen leeren String
 
+Ob ein Speicherort nutzbar ist, wird vorab nur abgeschätzt - etwa daran, ob ein Verzeichnis beschreibbar ist. Scheitert das Speichern trotzdem (volle Festplatte, `open_basedir`, Dateisystemzugriff per FTP), wird der Schlüssel am nächsten nutzbaren Ort dieser Reihenfolge gespeichert. Das wird als Warnung `key_saved_in_fallback_place` gemeldet, landet er in der Datenbank zusätzlich als `insecure_place_database`. Mit den nächsten Requests wird er dort gefunden (Warnung `key_in_inactive_place`). Speicherorte, in denen nichts gespeichert werden kann (Umgebungs- und Servervariable, WordPress-Salts), kommen dafür nicht in Frage. Ist ein Speicherort mit `force_place` erzwungen, wird nicht ausgewichen.
+
 ### Hinweis:
 
 Standardmäßig wird der Schlüssel in der Datei **wp-config.php** gespeichert – dies funktioniert ohne zusätzliche Konfiguration und reicht für die meisten Zwecke aus.
