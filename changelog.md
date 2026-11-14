@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Optimized loading of methods to be compatible with Mozart or strauss
+
 ## [4.2.0] - 12.11.2026
 
 ### Added
