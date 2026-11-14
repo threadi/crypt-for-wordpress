@@ -20,6 +20,9 @@
  *   unreadable.
  * - It fails closed: if the Secrets API holds the key but cannot hand it
  *   over, no new key is generated.
+ * - During an uninstallation the key of every method is kept as secret
+ *   "{slug}/uninstalled-{method}", if the Secrets API can take it - in
+ *   any order of the places, unless 'block_secrets_api' is set.
  *
  * @package crypt-for-wordpress
  */
@@ -231,6 +234,7 @@ class SecretsApi extends Place_Base {
 	 * @return string
 	 */
 	public function get_secret_name(): string {
+		$slug        = $this->get_crypt_obj()->get_slug();
 		$secret_name = $this->get_secret_namespace() . '/' . self::sanitize_segment( $this->get_constant(), self::MAX_NAME_LENGTH - self::MAX_NAMESPACE_LENGTH - 1 );
 
 		/**
@@ -243,7 +247,7 @@ class SecretsApi extends Place_Base {
 		 * @param string $secret_name The name of the secret ("namespace/key").
 		 * @param string $constant    The constant the key is used as.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_secrets_api_name', $secret_name, $this->get_constant() );
+		return apply_filters( $slug . '_crypt_secrets_api_name', $secret_name, $this->get_constant() );
 	}
 
 	/**
@@ -509,6 +513,112 @@ class SecretsApi extends Place_Base {
 	}
 
 	/**
+	 * Return the name of the secret, which holds the key of the given method
+	 * during an uninstallation: "namespace/uninstalled-{method}".
+	 *
+	 * Like the option an uninstallation used before, it depends on the name
+	 * of the method only - not on the constant, whose name can be filtered.
+	 *
+	 * @param string $method_name The name of the method.
+	 *
+	 * @return string
+	 */
+	public function get_kept_key_name( string $method_name ): string {
+		return $this->get_secret_namespace() . '/' . self::sanitize_segment( 'uninstalled-' . $method_name, self::MAX_NAME_LENGTH - self::MAX_NAMESPACE_LENGTH - 1 );
+	}
+
+	/**
+	 * Keep the key of the given method as secret during an uninstallation,
+	 * so a later installation can use it again.
+	 *
+	 * The Secrets API encrypts it - unlike an option in the database, which
+	 * holds the key in plain text next to the values encrypted with it.
+	 *
+	 * @param string $method_name The name of the method.
+	 * @param string $key         The key as it is stored.
+	 *
+	 * @return bool True if the Secrets API holds the key now.
+	 */
+	public function keep_key( string $method_name, #[\SensitiveParameter] string $key ): bool {
+		// bail if nothing can be kept here.
+		if ( '' === $key || '' === $method_name || $this->is_blocked() || ! $this->is_available() || ! $this->api_is_writable() ) {
+			return false;
+		}
+
+		// get the name of the secret.
+		$name = $this->get_kept_key_name( $method_name );
+
+		// bail if it could not be saved.
+		if ( $this->api_set( $name, $key ) instanceof WP_Error ) {
+			return false;
+		}
+
+		// do not trust the write: check that the secret holds the key.
+		$secret = $this->api_get( $name );
+
+		return $secret instanceof WP_Secret && hash_equals( $this->reveal( $secret ), $key );
+	}
+
+	/**
+	 * Return the key of the given method kept as secret during an
+	 * uninstallation, an empty string if there is none - or the error,
+	 * which prevents reading it.
+	 *
+	 * This is a lookup: it must not define, save or report anything.
+	 *
+	 * @param string $method_name The name of the method.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function get_kept_key( string $method_name ): string|WP_Error {
+		// bail if this place cannot be used.
+		if ( '' === $method_name || $this->is_blocked() || ! $this->is_available() ) {
+			return '';
+		}
+
+		// get the secret.
+		$secret = $this->api_get( $this->get_kept_key_name( $method_name ) );
+
+		// bail if it could not be read.
+		if ( $secret instanceof WP_Error ) {
+			return $secret;
+		}
+
+		// bail if there is none.
+		if ( null === $secret ) {
+			return '';
+		}
+
+		// get its value.
+		$key = $this->reveal( $secret );
+
+		// bail if the provider does not hand it over.
+		if ( '' === $key ) {
+			return new WP_Error( 'secret_withheld', 'The Secrets API of WordPress does not hand over the key kept during an uninstallation.' );
+		}
+
+		return $key;
+	}
+
+	/**
+	 * Remove the key of the given method kept as secret during an
+	 * uninstallation.
+	 *
+	 * @param string $method_name The name of the method.
+	 *
+	 * @return void
+	 */
+	public function forget_kept_key( string $method_name ): void {
+		// bail if this place cannot be used, or the hosting manages the secrets.
+		if ( '' === $method_name || $this->is_blocked() || ! $this->is_available() || ! $this->api_is_writable() ) {
+			return;
+		}
+
+		// remove the secret.
+		$this->api_delete( $this->get_kept_key_name( $method_name ) );
+	}
+
+	/**
 	 * Return whether the key of this place is the same for every site of a
 	 * multisite network: it is not, the Secrets API keeps secrets per site.
 	 *
@@ -520,6 +630,9 @@ class SecretsApi extends Place_Base {
 
 	/**
 	 * Uninstall this place.
+	 *
+	 * The key kept during the uninstallation is not removed: a later
+	 * installation reads it from there.
 	 *
 	 * @param string $constant The constant to use during the uninstallation.
 	 * @return void

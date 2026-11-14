@@ -23,9 +23,9 @@ Version | Description
 ------- | -----------
 `2.0.0` | Available since 2.0.0.
 
-Source: [src/Crypt.php](Crypt.php), [line 568](Crypt.php#L568-L577)
+Source: [src/Crypt.php](../src/Crypt.php), [line 1211](../src/Crypt.php#L1211-L1220)
 
-### `{$slug}_crypt_wp_config_written`
+### `{$slug}_wp_config_written`
 
 *Run tasks after wp-config.php has been written.*
 
@@ -41,120 +41,9 @@ Version | Description
 ------- | -----------
 `3.0.0` | Available since 3.0.0.
 
-Source: [src/Places/WpConfig.php](Places/WpConfig.php), [line 276](Places/WpConfig.php#L276-L282)
+Source: [src/Places/WpConfig.php](../src/Places/WpConfig.php), [line 309](../src/Places/WpConfig.php#L309-L315)
 
 ## Filters
-
-### `{$slug}_crypt_methods`
-
-*Filter the available crypt-methods.*
-
-**Arguments**
-
-Argument | Type | Description
--------- | ---- | -----------
-`$methods` | `array<int,string>` | List of methods.
-
-**Changelog**
-
-Version | Description
-------- | -----------
-`1.0.0` | Available since 1.0.0.
-
-Source: [src/Crypt.php](Crypt.php), [line 181](Crypt.php#L181-L187)
-
-### `{$slug}_crypt_places`
-
-*Filter the available places.*
-
-**Arguments**
-
-Argument | Type | Description
--------- | ---- | -----------
-`$places` | `array<int,string>` | List of methods.
-
-**Changelog**
-
-Version | Description
-------- | -----------
-`1.0.0` | Available since 1.0.0.
-
-Source: [src/Crypt.php](Crypt.php), [line 408](Crypt.php#L408-L414)
-
-### `{$slug}_crypt_wp_config_name`
-
-*Filter to change the filename of the used wp-config.php without its extension .php.*
-
-**Arguments**
-
-Argument | Type | Description
--------- | ---- | -----------
-`$wp_config_php` | `string` | The filename.
-
-**Changelog**
-
-Version | Description
-------- | -----------
-`1.0.0` | Available since 1.0.0.
-
-Source: [src/Places/WpConfig.php](Places/WpConfig.php), [line 297](Places/WpConfig.php#L297-L303)
-
-### `{$slug}_wp_config_path`
-
-*Filter the path for the wp-config.php before we return it.*
-
-**Arguments**
-
-Argument | Type | Description
--------- | ---- | -----------
-`$wp_config_php_path` | `string` | The path.
-
-**Changelog**
-
-Version | Description
-------- | -----------
-`1.0.0` | Available since 1.0.0.
-
-Source: [src/Places/WpConfig.php](Places/WpConfig.php), [line 316](Places/WpConfig.php#L316-L322)
-
-### `{$slug}_crypt_database_option_name`
-
-*Filter the name of the option in the database.*
-
-**Arguments**
-
-Argument | Type | Description
--------- | ---- | -----------
-`$option_name` | `string` | The option name.
-
-**Changelog**
-
-Version | Description
-------- | -----------
-`2.1.0` | Available since 2.1.0.
-
-Source: [src/Places/Database.php](Places/Database.php), [line 63](Places/Database.php#L63-L69)
-
-### `{$slug}_crypt_secrets_api_name`
-
-*Filter the name of the secret holding the key.*
-
-Changing it later is like a lost key: the secret saved under the former name is not found anymore.
-
-**Arguments**
-
-Argument | Type | Description
--------- | ---- | -----------
-`$secret_name` | `string` | The name of the secret ("namespace/key").
-`$constant` | `string` | The constant the key is used as.
-
-**Changelog**
-
-Version | Description
-------- | -----------
-`4.1.0` | Available since 4.1.0.
-
-Source: [src/Places/SecretsApi.php](Places/SecretsApi.php), [line 176](Places/SecretsApi.php#L166-L176)
 
 ### `{$slug}_crypt_constant`
 
@@ -172,7 +61,7 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Method_Base.php](Method_Base.php), [line 182](Method_Base.php#L182-L188)
+Source: [src/Method_Base.php](../src/Method_Base.php), [line 309](../src/Method_Base.php#L309-L315)
 
 ### `{$slug}_crypt_constant`
 
@@ -190,8 +79,120 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Methods/Sodium.php](Methods/Sodium.php), [line 170](Methods/Sodium.php#L170-L176)
+Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 236](../src/Methods/Sodium.php#L236-L242)
+
+### `{$slug}_crypt_database_option_name`
+
+*Filter the name of the option in the database.*
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$option_name` | `string` | The option name.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`2.1.0` | Available since 2.1.0.
+
+Source: [src/Places/Database.php](../src/Places/Database.php), [line 65](../src/Places/Database.php#L65-L71)
+
+### `{$slug}_crypt_methods`
+
+*Filter the available crypt-methods.*
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$methods` | `array<int,string>` | List of methods.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`1.0.0` | Available since 1.0.0.
+
+Source: [src/Crypt.php](../src/Crypt.php), [line 598](../src/Crypt.php#L598-L604)
+
+### `{$slug}_crypt_places`
+
+*Filter the available places.*
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$places` | `array<int,string>` | List of methods.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`1.0.0` | Available since 1.0.0.
+
+Source: [src/Crypt.php](../src/Crypt.php), [line 907](../src/Crypt.php#L907-L913)
+
+### `{$slug}_crypt_secrets_api_name`
+
+*Filter the name of the secret holding the key.*
+
+Changing it later is like a lost key: the secret saved under the
+former name is not found anymore.
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$secret_name` | `string` | The name of the secret ("namespace/key").
+`$this->get_constant()` |  | 
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`4.1.0` | Available since 4.1.0.
+
+Source: [src/Places/SecretsApi.php](../src/Places/SecretsApi.php), [line 240](../src/Places/SecretsApi.php#L240-L250)
+
+### `{$slug}_wp_config_name`
+
+*Filter to change the filename of the used wp-config.php without its extension .php.*
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$wp_config_php` | `string` | The filename.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`1.0.0` | Available since 1.0.0.
+
+Source: [src/Places/WpConfig.php](../src/Places/WpConfig.php), [line 330](../src/Places/WpConfig.php#L330-L336)
+
+### `{$slug}_wp_config_path`
+
+*Filter the path for the wp-config.php before we return it.*
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$wp_config_php_path` | `string` | The path.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`1.0.0` | Available since 1.0.0.
+
+Source: [src/Places/WpConfig.php](../src/Places/WpConfig.php), [line 349](../src/Places/WpConfig.php#L349-L355)
 
 
-<p align="center"><a href="https://github.com/pronamic/wp-documentor"><img src="https://cdn.jsdelivr.net/gh/pronamic/wp-documentor@main/logos/pronamic-wp-documentor.svgo-min.svg" alt="Pronamic WordPress Documentor" width="32" height="32"></a><br><em>Generated by <a href="https://github.com/pronamic/wp-documentor">Pronamic WordPress Documentor</a> <code>1.2.0</code></em><p>
+<p align="center"><em>Generated by <a href="https://github.com/pronamic/wp-documentor">Pronamic WordPress Documentor</a></em></p>
 

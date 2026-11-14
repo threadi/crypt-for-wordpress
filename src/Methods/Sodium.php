@@ -18,6 +18,12 @@ use SodiumException;
 
 /**
  * Object to handle crypt tasks with Sodium.
+ *
+ * Configuration:
+ * - 'sodium' => array( 'algorithm' => 'xchacha20poly1305' ), // the default. Or: 'aegis256', 'aes256gcm', 'chacha20poly1305', or 'auto' for the fastest one of the server.
+ *
+ * Every value names the algorithm it has been encrypted with, so values of
+ * every algorithm stay readable - wherever the server supports it.
  */
 class Sodium extends Method_Base {
 	/**
@@ -41,6 +47,7 @@ class Sodium extends Method_Base {
 	 */
 	protected array $configuration = array(
 		'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen',
+		'algorithm' => 'xchacha20poly1305',
 	);
 
 	/**
@@ -68,6 +75,25 @@ class Sodium extends Method_Base {
 	);
 
 	/**
+	 * The algorithms, which can be configured with 'algorithm', by name.
+	 *
+	 * @var array<string,int>
+	 */
+	private const ALGORITHM_NAMES = array(
+		'aegis256'          => self::ALGO_AEGIS256,
+		'aes256gcm'         => self::ALGO_AES256GCM,
+		'xchacha20poly1305' => self::ALGO_XCHACHA20POLY1305,
+		'chacha20poly1305'  => self::ALGO_CHACHA20POLY1305,
+	);
+
+	/**
+	 * Whether a configured algorithm, which cannot be used, has been reported.
+	 *
+	 * @var bool
+	 */
+	private bool $algorithm_reported = false;
+
+	/**
 	 * Initialize the object.
 	 *
 	 * @param Crypt $crypt_obj The crypt object.
@@ -80,8 +106,9 @@ class Sodium extends Method_Base {
 	 * Initiate this method.
 	 *
 	 * Looks for the key in this order: the constant (set by the place or by
-	 * WordPress itself), the option an uninstallation left behind, a key the
-	 * place derives itself, a place which is not the active one anymore.
+	 * WordPress itself), a key the place derives itself, the key an
+	 * uninstallation kept (as secret or option), a place which is not the
+	 * active one anymore.
 	 * Only if none of them has a key, a new one is generated - and this is
 	 * reported, if this installation had a key before.
 	 *
@@ -110,25 +137,23 @@ class Sodium extends Method_Base {
 
 				// a derived key is recreated on every request: it must not be
 				// written into a place. It is the key of this place, so it also
-				// wins over a key an uninstallation may have left in the database
+				// wins over a key an uninstallation may have kept
 				// - which this place could never take over.
 				$this->confirm_key();
 				return;
 			}
 
-			// get hash from the old db entry.
-			$option_name = $this->get_crypt_obj()->get_slug() . '_sodium_hash';
-			$option_hash = get_option( $option_name, '' );
-			$this->set_hash( sodium_base642bin( is_string( $option_hash ) ? $option_hash : '', $this->get_coding_id() ) );
+			// get the key an uninstallation has kept.
+			$this->set_hash( sodium_base642bin( $this->get_key_kept_for_uninstall(), $this->get_coding_id() ) );
 
 			// move it into its place.
 			if ( ! empty( $this->get_hash() ) ) {
 				$this->confirm_key();
 
-				// delete the old option field only if the place really holds the
-				// key now - otherwise the option stays the only copy of it.
+				// remove the kept key only if the place really holds it now -
+				// otherwise it stays the only copy of it.
 				if ( $this->persist_key() ) {
-					delete_option( $option_name );
+					$this->forget_key_kept_for_uninstall();
 				}
 
 				// run the constant for this process.
@@ -205,7 +230,8 @@ class Sodium extends Method_Base {
 	 * @return string
 	 */
 	public function get_constant(): string {
-		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-SODIUM-HASH';
+		$slug     = $this->get_crypt_obj()->get_slug();
+		$constant = strtoupper( $slug ) . '-SODIUM-HASH';
 
 		/**
 		 * Filter the name of the constant.
@@ -213,7 +239,7 @@ class Sodium extends Method_Base {
 		 * @since 1.1.2 Available since 1.1.2.
 		 * @param string $constant The constant name.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		return apply_filters( $slug . '_crypt_constant', $constant );
 	}
 
 	/**
@@ -226,7 +252,65 @@ class Sodium extends Method_Base {
 	}
 
 	/**
-	 * Determine the best available AEAD algorithm tier on this server.
+	 * Return the algorithm new values are encrypted with.
+	 *
+	 * This is XChaCha20-Poly1305, unless another one is configured with
+	 * 'algorithm'. It is the algorithm WordPress uses for its secrets as
+	 * well: it does not depend on the hardware or on a recent version of
+	 * libsodium. A value encrypted with it stays readable after a move to
+	 * another server.
+	 *
+	 * Up to version 4.2.0 the fastest algorithm of the server has been
+	 * used - AEGIS-256 or AES-256-GCM, if available. Values written with
+	 * them cannot be decrypted on a server without them. The algorithm is
+	 * part of every value, so these values stay readable wherever their
+	 * algorithm is available. This behavior can be restored with
+	 * 'algorithm' => 'auto'.
+	 *
+	 * A configured algorithm, which this server does not support, is
+	 * reported once, and the default is used instead.
+	 *
+	 * @return self::ALGO_* One of the self::ALGO_* constants.
+	 */
+	private function detect_algorithm(): int {
+		// get the configured algorithm.
+		$configured = isset( $this->configuration['algorithm'] ) && is_string( $this->configuration['algorithm'] ) ? strtolower( $this->configuration['algorithm'] ) : 'xchacha20poly1305';
+
+		// use the fastest algorithm of this server, if requested.
+		if ( 'auto' === $configured ) {
+			return $this->detect_fastest_algorithm();
+		}
+
+		// use the configured algorithm, if this server supports it.
+		if ( isset( self::ALGORITHM_NAMES[ $configured ] ) && $this->is_algorithm_available( self::ALGORITHM_NAMES[ $configured ] ) ) {
+			return self::ALGORITHM_NAMES[ $configured ];
+		}
+
+		// report a configured algorithm, which cannot be used - once.
+		if ( 'xchacha20poly1305' !== $configured && ! $this->algorithm_reported ) {
+			$this->algorithm_reported = true;
+
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_algorithm_not_available',
+				'The configured algorithm for Sodium is unknown or not supported by this server. XChaCha20-Poly1305 is used instead.',
+				array(
+					'algorithm' => $configured,
+				)
+			);
+		}
+
+		// use the portable default.
+		if ( $this->is_algorithm_available( self::ALGO_XCHACHA20POLY1305 ) ) {
+			return self::ALGO_XCHACHA20POLY1305;
+		}
+
+		// return the fallback for very old versions of libsodium.
+		return self::ALGO_CHACHA20POLY1305;
+	}
+
+	/**
+	 * Return the fastest AEAD algorithm tier this server supports.
 	 *
 	 * Order of preference: AEGIS-256 (fastest, libsodium >= 1.0.19) >
 	 * AES-256-GCM (fast, but only if hardware-accelerated) > XChaCha20-
@@ -235,24 +319,37 @@ class Sodium extends Method_Base {
 	 *
 	 * @return self::ALGO_* One of the self::ALGO_* constants.
 	 */
-	private function detect_algorithm(): int {
-		// use aegis256.
-		if ( function_exists( 'sodium_crypto_aead_aegis256_encrypt' ) ) {
-			return self::ALGO_AEGIS256;
-		}
-
-		// use aes256gcm.
-		if ( function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && function_exists( 'sodium_crypto_aead_aes256gcm_is_available' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
-			return self::ALGO_AES256GCM;
-		}
-
-		// use xchacha20poly1305.
-		if ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' ) ) {
-			return self::ALGO_XCHACHA20POLY1305;
+	private function detect_fastest_algorithm(): int {
+		foreach ( array( self::ALGO_AEGIS256, self::ALGO_AES256GCM, self::ALGO_XCHACHA20POLY1305 ) as $algorithm ) {
+			if ( $this->is_algorithm_available( $algorithm ) ) {
+				return $algorithm;
+			}
 		}
 
 		// return the default value.
 		return self::ALGO_CHACHA20POLY1305;
+	}
+
+	/**
+	 * Return whether this server can encrypt with the given algorithm tier.
+	 *
+	 * @param int $algorithm One of the self::ALGO_* constants.
+	 *
+	 * @return bool
+	 */
+	private function is_algorithm_available( int $algorithm ): bool {
+		switch ( $algorithm ) {
+			case self::ALGO_AEGIS256:
+				return function_exists( 'sodium_crypto_aead_aegis256_encrypt' );
+			case self::ALGO_AES256GCM:
+				return function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && function_exists( 'sodium_crypto_aead_aes256gcm_is_available' ) && sodium_crypto_aead_aes256gcm_is_available();
+			case self::ALGO_XCHACHA20POLY1305:
+				return function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' );
+			case self::ALGO_CHACHA20POLY1305:
+				return function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_encrypt' );
+		}
+
+		return false;
 	}
 
 	/**
@@ -376,7 +473,7 @@ class Sodium extends Method_Base {
 		}
 
 		try {
-			// pick the best algorithm tier this server actually supports.
+			// get the algorithm to encrypt with: the portable default, unless configured otherwise.
 			$algorithm = $this->detect_algorithm();
 
 			// nonce length depends on the algorithm, never hardcoded.

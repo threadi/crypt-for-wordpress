@@ -74,8 +74,9 @@ class OpenSsl extends Method_Base {
 	 * Constructor for this object.
 	 *
 	 * Looks for the key in this order: the constant (set by the place or by
-	 * WordPress itself), the option an uninstallation left behind, a key the
-	 * place derives itself, a place which is not the active one anymore.
+	 * WordPress itself), a key the place derives itself, the key an
+	 * uninstallation kept (as secret or option), a place which is not the
+	 * active one anymore.
 	 * Only if none of them has a key, a new one is generated - and this is
 	 * reported, if this installation had a key before.
 	 *
@@ -99,25 +100,23 @@ class OpenSsl extends Method_Base {
 
 			// a derived key is recreated on every request: it must not be
 			// written into a place. It is the key of this place, so it also
-			// wins over a key an uninstallation may have left in the database
+			// wins over a key an uninstallation may have kept
 			// - which this place could never take over.
 			$this->confirm_key();
 			return;
 		}
 
-		// get hash from the database.
-		$option_name = $this->get_crypt_obj()->get_slug() . '_hash';
-		$option_hash = get_option( $option_name, '' );
-		$this->set_hash( is_string( $option_hash ) ? $option_hash : '' );
+		// get the key an uninstallation has kept.
+		$this->set_hash( $this->get_key_kept_for_uninstall() );
 
 		// move it into its place.
 		if ( ! empty( $this->get_hash() ) ) {
 			$this->confirm_key();
 
-			// delete the old option field only if the place really holds the
-			// key now - otherwise the option stays the only copy of it.
+			// remove the kept key only if the place really holds it now -
+			// otherwise it stays the only copy of it.
 			if ( $this->persist_key() ) {
-				delete_option( $option_name );
+				$this->forget_key_kept_for_uninstall();
 			}
 
 			// run the constant for this process.

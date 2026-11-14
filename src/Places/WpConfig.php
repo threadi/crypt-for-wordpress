@@ -305,13 +305,14 @@ class WpConfig extends Place_Base {
 			opcache_invalidate( $path, true );
 		}
 
+		$slug = $this->get_crypt_obj()->get_slug();
 		/**
 		 * Run tasks after wp-config.php has been written.
 		 *
 		 * @since 3.0.0 Available since 3.0.0.
 		 * @param string $path The path to the wp-config.php.
 		 */
-		do_action( $this->get_crypt_obj()->get_slug() . '_wp_config_written', $path );
+		do_action( $slug . '_wp_config_written', $path );
 	}
 
 	/**

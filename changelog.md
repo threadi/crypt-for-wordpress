@@ -2,9 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `encrypt_or_error()` and `decrypt_or_error()` on the Crypt object: they return the same string as `encrypt()` and `decrypt()` on success, and a `WP_Error` with the reasons otherwise. A failure can be told apart from a value without content this way. `encrypt()` and `decrypt()` are unchanged
+- Added the setting `'sodium' => array( 'algorithm' => '...' )` to choose the algorithm of Sodium for new values: `xchacha20poly1305` (default), `aegis256`, `aes256gcm`, `chacha20poly1305` or `auto`
+- Added the warning "sodium_algorithm_not_available": the configured algorithm is unknown or not supported by the server, XChaCha20-Poly1305 is used instead
+- Added the conformance tests `CryptForWordPress\Testing\PlaceConformance` and `CryptForWordPress\Testing\MethodConformance` for places and methods of your own, see docs/Testing.md. The places and methods of this package are tested with them as well
+- Added `get_place_by_name()` on the Crypt object
+- Added `discard_kept_keys()` on the Crypt object: it removes the keys an uninstallation has kept, so a later installation can start over with a new key - e.g. if the kept secret cannot be read anymore after the WordPress salts have been changed. The error "secrets_api_unavailable" names such a kept key with `kept_key` in its data
+- Added the workflow "Hook documentation", which updates docs/hooks.md on every pull request changing src/. The template bin/wp-documentor-markdown.php sorts the hooks by name, so their order does not depend on the file system
+- Added tests with WordPress 6.9 and 7.2 for the key kept during an uninstallation, for the autoload of the place "database" and for the algorithms of Sodium
+
 ### Changed
 
 - Optimized loading of methods to be compatible with Mozart or strauss
+- Since WordPress 7.2, `uninstall()` keeps the key as secret with the Secrets API of WordPress ("{slug}/uninstalled-openssl", "{slug}/uninstalled-sodium"), encrypted by WordPress, and no longer in plain text in the database. Only if the Secrets API is not available, does not accept new secrets, does not confirm the secret or is blocked with `'block_secrets_api' => true`, the key is kept in the options as before. A later installation reads it from both, moves it into its place and removes the kept copy only afterward. A kept secret, which cannot be read, is reported as "secrets_api_unavailable", and no new key is generated
+- The key kept in the database during an uninstallation is not loaded with every request anymore
+- The place "database" saves the key in an option, which is not loaded with every request - so it does not end up in a persistent object cache. A key saved by an older version is changed accordingly, as soon as it is loaded (WordPress 6.4 or newer)
+- Sodium encrypts new values with XChaCha20-Poly1305, as WordPress does for its secrets - not anymore with the fastest algorithm of the server. Values written with AEGIS-256 or AES-256-GCM could not be decrypted on a server without it. Values of every algorithm stay readable. `'algorithm' => 'auto'` restores the former behavior
+- Every hook name starts with the variable `$slug` now, so wp-documentor can read it. The names of the hooks are unchanged
+
+### Fixed
+
+- Fixed the names of three hooks in docs/hooks.md, which did not match the code: `{slug}_wp_config_written` and `{slug}_wp_config_name` were documented with "_crypt" in their name, the link targets and line numbers were outdated
+- Fixed the name of the hook in the examples of the documentation for errors and places: `{slug}_crypt_error` and `{slug}_crypt_places`
 
 ## [4.2.0] - 12.11.2026
 

@@ -20,7 +20,7 @@ A new key is only used once it has been saved in its place. If saving in the act
 
 On a multisite network the fingerprint is saved where the key lives: for the whole network if the key is in a file or a variable, per site if it is in the database. This also applies to a key, which has ended up in a fallback place.
 
-`uninstall()` keeps the key in the database, so a later installation can read the existing values again - wherever the key has been saved. If there is no key to keep, the fingerprint is removed as well.
+`uninstall()` keeps the key, so a later installation can read the existing values again - wherever the key has been saved. Since WordPress 7.2 it is kept as secret with the Secrets API of WordPress, otherwise in an option in the database, which is not loaded with every request (see [Security model](SecurityModel.md)). A later installation moves it into its place, and only then removes the kept copy. If the kept secret exists, but cannot be read, no new key is generated: `secrets_api_unavailable` and `key_unavailable` are reported. After the user of your plugin has confirmed it, `$crypt->discard_kept_keys()` starts over with a new key (see [Secrets API](places/SecretsApi.md#uninstallation)). If there is no key to keep, the fingerprint is removed as well.
 
 ## Errors
 

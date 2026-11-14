@@ -111,6 +111,27 @@ class Crypt {
 	protected ?WP_Error $errors = null;
 
 	/**
+	 * The number of errors, which have been added during the life of this
+	 * object - clear_errors() does not reset it.
+	 *
+	 * @var int
+	 */
+	private int $error_count = 0;
+
+	/**
+	 * The errors added since the last call of clear_errors(), with their
+	 * number, each with its code, message and data.
+	 *
+	 * WP_Error keeps the data of an error only if it is not empty, so its
+	 * messages and data cannot be matched up again. This list keeps them
+	 * together, so encrypt_or_error() and decrypt_or_error() can tell which
+	 * errors happened during their call.
+	 *
+	 * @var array<int,array{code:string,message:string,data:array<string,mixed>}>
+	 */
+	private array $error_log = array();
+
+	/**
 	 * Constructor for this object.
 	 *
 	 * @param string $plugin_path The path to the WordPress plugin using this object. E.g., __FILE__.
@@ -439,6 +460,129 @@ class Crypt {
 	}
 
 	/**
+	 * Return an encrypted string - or a WP_Error, if the value could not be
+	 * encrypted.
+	 *
+	 * The method encrypt() returns an empty string on any error, so a
+	 * failure cannot be told apart from a value without content. This method returns the
+	 * same string as encrypt() on success, and a WP_Error otherwise. Its
+	 * code is "encrypt_failed", its other codes are the errors, which have
+	 * been reported during this call - e.g. "key_unavailable" and
+	 * "no_key_available". They are collected in get_errors() as well.
+	 *
+	 * An empty plain text is no error: there is nothing to encrypt.
+	 * Warnings, which do not prevent the encryption - e.g.
+	 * "insecure_place_database" - are only collected in get_errors().
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @param string $plain_text String to encrypt.
+	 * @param string $context    Optional. What the value belongs to.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function encrypt_or_error( #[\SensitiveParameter] string $plain_text, string $context = '' ): string|WP_Error {
+		// remember which errors have been reported before this call.
+		$errors_before = $this->error_count;
+
+		// get the active method first: what its initialization reports is no
+		// error of the value, unless the value cannot be encrypted.
+		$this->get_method();
+		$errors_before_value = $this->error_count;
+
+		// encrypt the value.
+		$encrypted = $this->encrypt( $plain_text, $context );
+
+		// return the encrypted value.
+		if ( '' !== $encrypted ) {
+			return $encrypted;
+		}
+
+		// return the empty string, if there was nothing to encrypt.
+		if ( '' === $plain_text && $errors_before_value === $this->error_count ) {
+			return '';
+		}
+
+		// return the errors of this call.
+		return $this->get_errors_since( $errors_before, 'encrypt_failed', 'The value could not be encrypted.', $context );
+	}
+
+	/**
+	 * Return the decrypted string - or a WP_Error, if the value could not be
+	 * decrypted.
+	 *
+	 * The method decrypt() returns an empty string on any error, so a
+	 * failure cannot be told apart from a value without content. This method returns the
+	 * same string as decrypt() on success, and a WP_Error otherwise. Its
+	 * code is "decrypt_failed", its other codes are the errors, which have
+	 * been reported during this call - e.g. "sodium_decrypt_error" for a
+	 * value, which has been changed or belongs to another context. They are
+	 * collected in get_errors() as well.
+	 *
+	 * An empty string is returned for an empty value, and for a value,
+	 * whose content is empty: both are no errors. A method, which reports
+	 * none of its errors, cannot be told apart from such a value.
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @param string $encrypted_text Text to decrypt.
+	 * @param string $context        Optional. The context the value has been encrypted with.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function decrypt_or_error( string $encrypted_text, string $context = '' ): string|WP_Error {
+		// bail if there is no value: there is nothing to decrypt.
+		if ( '' === $encrypted_text ) {
+			return '';
+		}
+
+		// remember which errors have been reported before this call.
+		$errors_before = $this->error_count;
+
+		// get the active method first: what its initialization reports is no
+		// error of the value, unless the value cannot be decrypted.
+		$method_obj          = $this->get_method();
+		$errors_before_value = $this->error_count;
+
+		// decrypt the value.
+		$decrypted = $this->decrypt( $encrypted_text, $context );
+
+		// return the decrypted value - also an empty one, if no error has been
+		// reported for it.
+		if ( '' !== $decrypted || ( false !== $method_obj && $errors_before_value === $this->error_count ) ) {
+			return $decrypted;
+		}
+
+		// return the errors of this call.
+		return $this->get_errors_since( $errors_before, 'decrypt_failed', 'The value could not be decrypted.', $context );
+	}
+
+	/**
+	 * Return a WP_Error with the given error, followed by every error, which
+	 * has been reported after the given number of errors.
+	 *
+	 * @param int    $error_count The number of errors reported before.
+	 * @param string $code        The code of the error.
+	 * @param string $message     The message of the error.
+	 * @param string $context     The context of the value.
+	 *
+	 * @return WP_Error
+	 */
+	private function get_errors_since( int $error_count, string $code, string $message, string $context ): WP_Error {
+		// create the error.
+		$error = new WP_Error( $code, $message, array( 'context' => $context ) );
+
+		// add every error reported since then.
+		foreach ( $this->error_log as $number => $entry ) {
+			if ( $number > $error_count ) {
+				$error->add( $entry['code'], $entry['message'], $entry['data'] );
+			}
+		}
+
+		return $error;
+	}
+
+	/**
 	 * Return the list of supported methods.
 	 *
 	 * @return array<int,string>
@@ -519,6 +663,40 @@ class Crypt {
 
 		// return the resulting list of objects.
 		return $list;
+	}
+
+	/**
+	 * Remove the keys an uninstallation has kept - as secret and in the
+	 * database - for every method.
+	 *
+	 * An uninstallation keeps the key, so a later installation can read the
+	 * values encrypted with it again. If the key has been kept as secret,
+	 * and the Secrets API cannot hand it over anymore - e.g. because the
+	 * WordPress salts have been changed, while WP_SECRETS_KEY is not used -,
+	 * no new key is generated: "key_unavailable" is reported, and nothing is
+	 * encrypted. Restoring the former salts or WP_SECRETS_KEY makes the key
+	 * readable again.
+	 *
+	 * If that is not possible, this method allows starting over: the kept
+	 * keys are removed, and the next usage generates a new key. This is
+	 * reported as "key_missing". Every value encrypted with the former key
+	 * stays unreadable. So only call it after the user of your plugin has
+	 * confirmed this.
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @return void
+	 */
+	public function discard_kept_keys(): void {
+		foreach ( $this->get_method_objects( true ) as $obj ) {
+			// (a method of an older copy of this package keeps its key in the database only.)
+			if ( method_exists( $obj, 'discard_kept_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+				$obj->discard_kept_key();
+			}
+		}
+
+		// let the next usage look for a key again.
+		$this->method = false;
 	}
 
 	/**
@@ -797,6 +975,26 @@ class Crypt {
 	}
 
 	/**
+	 * Return the place with the given name, also if a configured
+	 * "force_place" hides it - or false, if there is none.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param string $name The name of the place.
+	 *
+	 * @return false|Place_Base
+	 */
+	public function get_place_by_name( string $name ): false|Place_Base {
+		foreach ( $this->get_place_objects( true ) as $place_obj ) {
+			if ( $name === $place_obj->get_name() ) {
+				return $place_obj;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Return the place, where the token should be saved.
 	 *
 	 * @internal Used for internal tasks.
@@ -1001,6 +1199,14 @@ class Crypt {
 			$data
 		);
 
+		// remember it with its number, for encrypt_or_error() and decrypt_or_error().
+		++$this->error_count;
+		$this->error_log[ $this->error_count ] = array(
+			'code'    => $code,
+			'message' => $message,
+			'data'    => $data,
+		);
+
 		$slug = $this->get_slug();
 		/**
 		 * Run tasks if an error is added to the list.
@@ -1041,6 +1247,7 @@ class Crypt {
 	 * @noinspection PhpUnused
 	 */
 	public function clear_errors(): void {
-		$this->errors = null;
+		$this->errors    = null;
+		$this->error_log = array();
 	}
 }

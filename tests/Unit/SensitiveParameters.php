@@ -180,6 +180,11 @@ class SensitiveParameters extends CryptForWordPressTests {
 
 		$files = array_merge( (array) glob( $src_path . '*.php' ), (array) glob( $src_path . '*/*.php' ) );
 		foreach ( $files as $file ) {
+			// bail if it is one of the conformance traits: they are for tests only, and hold no secret.
+			if ( str_starts_with( substr( (string) $file, strlen( $src_path ) ), 'Testing/' ) ) {
+				continue;
+			}
+
 			$class_name = 'CryptForWordPress\\' . str_replace( '/', '\\', substr( (string) $file, strlen( $src_path ), -4 ) );
 			$this->assertTrue( class_exists( $class_name ), $class_name );
 

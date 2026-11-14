@@ -10,6 +10,8 @@ namespace CryptForWordPress;
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
 
+use WP_Error;
+
 /**
  * Object to handle crypt methods as base-object.
  */
@@ -83,6 +85,14 @@ class Method_Base {
 	 * @var string
 	 */
 	private string $derived_key = '';
+
+	/**
+	 * Where get_key_kept_for_uninstall() has found the key: "secret",
+	 * "option" or an empty string.
+	 *
+	 * @var string
+	 */
+	private string $kept_key_source = '';
 
 	/**
 	 * Initialize this crypt method.
@@ -293,7 +303,8 @@ class Method_Base {
 	 * @return string
 	 */
 	public function get_constant(): string {
-		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
+		$slug     = $this->get_crypt_obj()->get_slug();
+		$constant = strtoupper( $slug ) . '-HASH';
 
 		/**
 		 * Filter the name of the constant.
@@ -301,7 +312,7 @@ class Method_Base {
 		 * @since 1.1.2 Available since 1.1.2.
 		 * @param string $constant The name of the constant.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		return apply_filters( $slug . '_crypt_constant', $constant );
 	}
 
 	/**
@@ -832,6 +843,12 @@ class Method_Base {
 	 * @return bool
 	 */
 	private function is_stored_key_unavailable(): bool {
+		// the key an uninstallation has kept as secret cannot be read: it is
+		// the key all values have been encrypted with.
+		if ( $this->is_kept_key_unavailable() ) {
+			return true;
+		}
+
 		// ask the Crypt object, if it is able to.
 		if ( method_exists( $this->get_crypt_obj(), 'is_stored_key_unavailable' ) ) { // @phpstan-ignore function.alreadyNarrowedType
 			return $this->get_crypt_obj()->is_stored_key_unavailable( $this->get_constant() );
@@ -849,6 +866,24 @@ class Method_Base {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Return whether the Secrets API holds a key of this method, which an
+	 * uninstallation has kept, but cannot hand it over right now.
+	 *
+	 * @return bool
+	 */
+	private function is_kept_key_unavailable(): bool {
+		// bail if this method keeps no key during an uninstallation.
+		if ( '' === $this->get_uninstall_option_name() ) {
+			return false;
+		}
+
+		// get the place of the Secrets API.
+		$place_obj = $this->get_secrets_api_place();
+
+		return $place_obj instanceof Places\SecretsApi && $place_obj->get_kept_key( $this->get_name() ) instanceof WP_Error;
 	}
 
 	/**
@@ -1056,6 +1091,11 @@ class Method_Base {
 	 * Put the key of this method aside, before the places are cleaned up
 	 * during an uninstallation. Does nothing if it has been done already.
 	 *
+	 * The key is kept as secret with the Secrets API of WordPress, if it can
+	 * take it: it is encrypted there. Otherwise, it is kept in an option in
+	 * the database, which is not loaded with every request. A later
+	 * installation reads it from there, see get_key_kept_for_uninstall().
+	 *
 	 * @internal Used for internal tasks.
 	 *
 	 * @return void
@@ -1085,9 +1125,164 @@ class Method_Base {
 			return;
 		}
 
-		// save the key in the database, exactly as it is - whether it is the
-		// known key of this installation is decided when it is used again.
-		update_option( $option_name, $stored_key );
+		// keep the key as secret, exactly as it is - whether it is the known
+		// key of this installation is decided when it is used again.
+		$place_obj = $this->get_secrets_api_place();
+		if ( $place_obj instanceof Places\SecretsApi && $place_obj->keep_key( $this->get_name(), $stored_key ) ) {
+			// an older uninstallation may have left this key in plain text in the database.
+			if ( get_option( $option_name, '' ) === $stored_key ) {
+				delete_option( $option_name );
+			}
+
+			// do nothing more.
+			return;
+		}
+
+		// save the key in the database instead - not loaded with every request.
+		update_option( $option_name, $stored_key, false );
+
+		// update_option() keeps the autoload, if the value has not changed.
+		Helper::disable_option_autoload( $option_name );
+	}
+
+	/**
+	 * Return the key an uninstallation has kept, as it is stored - or an
+	 * empty string.
+	 *
+	 * The secret is asked first, then the option in the database: an
+	 * uninstallation keeps the key in the option only, if the Secrets API
+	 * could not take it - or if it has been done by a version before 4.3.0.
+	 *
+	 * If the secret exists, but cannot be read, it is reported, and nothing
+	 * is returned. The key is unavailable then, so no new key is generated,
+	 * see is_stored_key_unavailable().
+	 *
+	 * @return string
+	 */
+	protected function get_key_kept_for_uninstall(): string {
+		$this->kept_key_source = '';
+
+		// bail if this method keeps no key during an uninstallation.
+		$option_name = $this->get_uninstall_option_name();
+		if ( '' === $option_name ) {
+			return '';
+		}
+
+		// get the key kept as secret.
+		$place_obj = $this->get_secrets_api_place();
+		if ( $place_obj instanceof Places\SecretsApi ) {
+			$kept_key = $place_obj->get_kept_key( $this->get_name() );
+
+			// bail if it cannot be read: it is the key all values have been encrypted with.
+			if ( $kept_key instanceof WP_Error ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'secrets_api_unavailable',
+					'The key for encryption, which has been kept during an uninstallation, could not be read from the Secrets API of WordPress. No new key is generated. Restore WP_SECRETS_KEY or the WordPress salts used before - or start over with a new key with discard_kept_keys(), which leaves the values encrypted so far unreadable.',
+					array(
+						'secret'   => $place_obj->get_kept_key_name( $this->get_name() ),
+						'reason'   => $kept_key->get_error_code(),
+						'kept_key' => true,
+					)
+				);
+
+				// do nothing more.
+				return '';
+			}
+
+			// use it, if there is one.
+			if ( '' !== $kept_key ) {
+				$this->kept_key_source = 'secret';
+				return $kept_key;
+			}
+		}
+
+		// get the key kept in the database.
+		$option_value = get_option( $option_name, '' );
+		if ( ! is_string( $option_value ) || '' === $option_value ) {
+			return '';
+		}
+
+		$this->kept_key_source = 'option';
+		return $option_value;
+	}
+
+	/**
+	 * Remove the key an uninstallation has kept, after it has been saved in
+	 * its place - from where get_key_kept_for_uninstall() has found it.
+	 *
+	 * @return void
+	 */
+	protected function forget_key_kept_for_uninstall(): void {
+		// remove the secret.
+		if ( 'secret' === $this->kept_key_source ) {
+			$place_obj = $this->get_secrets_api_place();
+			if ( $place_obj instanceof Places\SecretsApi ) {
+				$place_obj->forget_kept_key( $this->get_name() );
+			}
+		}
+
+		// remove the option.
+		if ( 'option' === $this->kept_key_source && '' !== $this->get_uninstall_option_name() ) {
+			delete_option( $this->get_uninstall_option_name() );
+		}
+
+		$this->kept_key_source = '';
+	}
+
+	/**
+	 * Remove the key an uninstallation has kept for this method - as secret
+	 * and in the database -, whether it can be read or not.
+	 *
+	 * @internal Used for internal tasks, see Crypt::discard_kept_keys().
+	 *
+	 * @return void
+	 */
+	public function discard_kept_key(): void {
+		// bail if this method keeps no key during an uninstallation.
+		$option_name = $this->get_uninstall_option_name();
+		if ( '' === $option_name ) {
+			return;
+		}
+
+		// remove the secret.
+		$place_obj = $this->get_secrets_api_place();
+		if ( $place_obj instanceof Places\SecretsApi ) {
+			$place_obj->forget_kept_key( $this->get_name() );
+		}
+
+		// remove the option.
+		delete_option( $option_name );
+
+		$this->kept_key_source = '';
+	}
+
+	/**
+	 * Return the place "secrets_api", if it can keep a key during an
+	 * uninstallation - or null.
+	 *
+	 * It is used whatever the order of the places is, and also if a
+	 * configured "force_place" hides it. Only 'block_secrets_api' prevents
+	 * its usage.
+	 *
+	 * @return Places\SecretsApi|null
+	 */
+	private function get_secrets_api_place(): ?Places\SecretsApi {
+		// get the place: an older Crypt class can only hand out the places a
+		// configured "force_place" does not hide.
+		$crypt_obj = $this->get_crypt_obj();
+		$places    = method_exists( $crypt_obj, 'get_place_by_name' ) ? array( $crypt_obj->get_place_by_name( 'secrets_api' ) ) : $crypt_obj->get_places_as_objects(); // @phpstan-ignore function.alreadyNarrowedType
+
+		foreach ( $places as $place_obj ) {
+			// bail if it is not the place of the Secrets API, or of an older copy of this package, which cannot keep a key.
+			if ( ! $place_obj instanceof Places\SecretsApi || ! method_exists( $place_obj, 'keep_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+				continue;
+			}
+
+			return $place_obj;
+		}
+
+		return null;
 	}
 
 	/**

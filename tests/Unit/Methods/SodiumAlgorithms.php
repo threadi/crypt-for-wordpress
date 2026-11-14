@@ -30,9 +30,11 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	/**
 	 * Return a Crypt object and a Sodium method, initialized with a known key.
 	 *
+	 * @param array<string,mixed> $config The configuration of the method.
+	 *
 	 * @return array{0:\CryptForWordPress\Crypt,1:\CryptForWordPress\Methods\Sodium}
 	 */
-	private function get_initialized_method(): array {
+	private function get_initialized_method( array $config = array() ): array {
 		if ( ! extension_loaded( 'sodium' ) ) {
 			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
 		}
@@ -40,12 +42,24 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 		$crypt_obj->set_slug( 'sodium-algorithms-' . uniqid( '', true ) );
 
-		$method    = new \CryptForWordPress\Methods\Sodium( $crypt_obj );
+		$method = new \CryptForWordPress\Methods\Sodium( $crypt_obj );
+		$method->set_config( $config );
 		$this->key = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
 		define( $method->get_constant(), sodium_bin2base64( $this->key, SODIUM_BASE64_VARIANT_ORIGINAL ) );
 		$method->init();
 
 		return array( $crypt_obj, $method );
+	}
+
+	/**
+	 * Return the algorithm byte of an encrypted value.
+	 *
+	 * @param string $value The encrypted value.
+	 *
+	 * @return int
+	 */
+	private function get_algorithm_of( string $value ): int {
+		return ord( sodium_base642bin( $value, SODIUM_BASE64_VARIANT_ORIGINAL )[0] );
 	}
 
 	/**
@@ -144,12 +158,91 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test that the method writes values with the best algorithm this server supports.
+	 * Test that the method writes new values with XChaCha20-Poly1305 without
+	 * any configuration - whatever else this server supports. Only then a
+	 * value stays readable after a move to another server.
 	 *
 	 * @return void
 	 */
-	public function test_encrypt_uses_the_best_supported_algorithm(): void {
-		list( , $method ) = $this->get_initialized_method();
+	public function test_encrypt_uses_xchacha20poly1305_by_default(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method();
+
+		$encrypted = $method->encrypt( 'Hallo World' );
+
+		$this->assertSame( 3, $this->get_algorithm_of( $encrypted ) );
+		$this->assertSame( 'Hallo World', $method->decrypt( $encrypted ) );
+		$this->assertFalse( $crypt_obj->has_errors() );
+	}
+
+	/**
+	 * Test that the Crypt object writes new values with XChaCha20-Poly1305
+	 * without any configuration.
+	 *
+	 * @return void
+	 */
+	public function test_crypt_uses_xchacha20poly1305_by_default(): void {
+		if ( ! extension_loaded( 'sodium' ) ) {
+			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		}
+
+		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
+		$crypt_obj->set_slug( 'sodium-algorithms-default-' . uniqid( '', true ) );
+		$crypt_obj->set_config(
+			array(
+				'force_method' => 'sodium',
+				'force_place'  => 'database',
+			)
+		);
+
+		$encrypted = $crypt_obj->encrypt( 'Hallo World' );
+
+		$this->assertSame( 3, $this->get_algorithm_of( $encrypted ) );
+		$this->assertSame( 'Hallo World', $crypt_obj->decrypt( $encrypted ) );
+	}
+
+	/**
+	 * Test that values of the faster algorithms, which versions up to 4.2.0
+	 * wrote on servers supporting them, stay readable with the default
+	 * configuration.
+	 *
+	 * @return void
+	 */
+	public function test_values_of_older_versions_stay_readable(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method();
+
+		$tested = 0;
+		foreach ( array( 'aegis256', 'aes256gcm' ) as $name ) {
+			list( $algorithm, $nonce_length, $function ) = $this->algorithms()[ $name ];
+
+			// bail if this server cannot write such a value.
+			if ( ! $this->is_available( $algorithm, $function ) ) {
+				continue;
+			}
+
+			$value = $this->build_value( $algorithm, $nonce_length, $function, 'Hallo World', '' );
+			$this->assertSame( 'Hallo World', $method->decrypt( $value ), $name );
+
+			$value = $this->build_value( $algorithm, $nonce_length, $function, 'Hallo World', 'api_secret' );
+			$this->assertSame( 'Hallo World', $method->decrypt_with_context( $value, 'api_secret' ), $name );
+
+			++$tested;
+		}
+
+		if ( 0 === $tested ) {
+			$this->markTestSkipped( 'This server supports neither AEGIS-256 nor AES-256-GCM.' );
+		}
+
+		$this->assertFalse( $crypt_obj->has_errors() );
+	}
+
+	/**
+	 * Test that 'algorithm' => 'auto' writes values with the fastest
+	 * algorithm this server supports, as versions up to 4.2.0 did.
+	 *
+	 * @return void
+	 */
+	public function test_auto_uses_the_fastest_supported_algorithm(): void {
+		list( , $method ) = $this->get_initialized_method( array( 'algorithm' => 'auto' ) );
 
 		$expected = 3;
 		if ( function_exists( 'sodium_crypto_aead_aegis256_encrypt' ) ) {
@@ -158,8 +251,57 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 			$expected = 2;
 		}
 
-		$payload = sodium_base642bin( $method->encrypt( 'Hallo World' ), SODIUM_BASE64_VARIANT_ORIGINAL );
-		$this->assertSame( $expected, ord( $payload[0] ) );
+		$encrypted = $method->encrypt( 'Hallo World' );
+		$this->assertSame( $expected, $this->get_algorithm_of( $encrypted ) );
+		$this->assertSame( 'Hallo World', $method->decrypt( $encrypted ) );
+	}
+
+	/**
+	 * Test that a configured algorithm is used, if this server supports it.
+	 * Otherwise XChaCha20-Poly1305 is used, and this is reported once.
+	 *
+	 * @dataProvider algorithms
+	 *
+	 * @param int    $algorithm    The id of the algorithm.
+	 * @param int    $nonce_length The length of the nonce.
+	 * @param string $function     The encrypt function.
+	 *
+	 * @return void
+	 */
+	public function test_configured_algorithm_is_used( int $algorithm, int $nonce_length, string $function ): void {
+		$name                       = (string) array_search( array( $algorithm, $nonce_length, $function ), $this->algorithms(), true );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( array( 'algorithm' => strtoupper( $name ) ) );
+
+		$encrypted = $method->encrypt( 'Hallo World' );
+		$this->assertSame( 'Hallo World', $method->decrypt( $encrypted ) );
+
+		// supported here: it is used.
+		if ( $this->is_available( $algorithm, $function ) ) {
+			$this->assertSame( $algorithm, $this->get_algorithm_of( $encrypted ) );
+			$this->assertFalse( $crypt_obj->has_errors() );
+
+			return;
+		}
+
+		// not supported here: the default is used, and it is reported once.
+		$method->encrypt( 'Hallo World' );
+		$this->assertSame( 3, $this->get_algorithm_of( $encrypted ) );
+		$this->assertCount( 1, $crypt_obj->get_errors()->get_error_messages( 'sodium_algorithm_not_available' ) );
+	}
+
+	/**
+	 * Test that an unknown algorithm is reported, and the default is used.
+	 *
+	 * @return void
+	 */
+	public function test_unknown_algorithm_uses_the_default(): void {
+		list( $crypt_obj, $method ) = $this->get_initialized_method( array( 'algorithm' => 'rot13' ) );
+
+		$encrypted = $method->encrypt( 'Hallo World' );
+
+		$this->assertSame( 3, $this->get_algorithm_of( $encrypted ) );
+		$this->assertSame( 'Hallo World', $method->decrypt( $encrypted ) );
+		$this->assertSame( array( 'algorithm' => 'rot13' ), $crypt_obj->get_errors()->get_error_data( 'sodium_algorithm_not_available' ) );
 	}
 
 	/**

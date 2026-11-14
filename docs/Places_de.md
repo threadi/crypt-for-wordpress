@@ -34,15 +34,17 @@ Wenn du den Schlüssel getrennt von den Datenbankzugangsdaten aufbewahren möcht
 
 ## Individuelle Speicherort
 
-Mit einem Hook ist es möglich eigene Speicherorte zu ergänzen. Der Hook setzt sich auf dem Slug deines Plugins und "_places" zusammen.
+Mit einem Hook ist es möglich eigene Speicherorte zu ergänzen. Der Hook setzt sich aus dem Slug deines Plugins und "_crypt_places" zusammen.
 
-Beispiel:
+Beispiel für ein Plugin mit dem Slug `crypt-for-wordpress-demo`:
 ```
 function cfwpd_place( array $places ): array {
  $places[] = '\YourNameSpace\MyPlace';
  return $places;
 }
-add_filter( 'crypt_for_wordpress_demo_places', 'cfwpd_place' )
+add_filter( 'crypt-for-wordpress-demo_crypt_places', 'cfwpd_place' );
 ```
 
 Die so ergänzte Klasse, muss \CryptForWordPress\Place_Base erweitern. Schau dir zum Aufbau die anderen mitgelieferten Klassen diesbezüglich an.
+
+Teste sie mit den Conformance-Tests dieses Packages: [Eigene Speicherorte und Methoden testen](Testing_de.md).

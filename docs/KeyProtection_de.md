@@ -20,7 +20,7 @@ Ein neuer Schlüssel wird erst verwendet, wenn er an seinem Speicherort angekomm
 
 In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schlüssel liegt: netzwerkweit, wenn der Schlüssel in einer Datei oder Variablen liegt, pro Website, wenn er in der Datenbank liegt. Das gilt auch für einen Schlüssel, der an einem ausweichenden Speicherort gelandet ist.
 
-`uninstall()` behält den Schlüssel in der Datenbank, damit eine spätere Installation die vorhandenen Werte wieder lesen kann - egal, wo der Schlüssel gespeichert war. Gibt es keinen Schlüssel zum Aufbewahren, wird auch der Fingerabdruck entfernt.
+`uninstall()` bewahrt den Schlüssel auf, damit eine spätere Installation die vorhandenen Werte wieder lesen kann - egal, wo der Schlüssel gespeichert war. Ab WordPress 7.2 geschieht das als Secret über die Secrets API von WordPress, sonst in einer Option in der Datenbank, die nicht bei jedem Request geladen wird (siehe [Sicherheitsmodell](SecurityModel_de.md)). Eine spätere Installation verschiebt ihn an seinen Speicherort und entfernt erst danach die aufbewahrte Kopie. Gibt es das aufbewahrte Secret, lässt es sich aber nicht lesen, wird kein neuer Schlüssel erzeugt: `secrets_api_unavailable` und `key_unavailable` werden gemeldet. Nach Bestätigung durch den Nutzer deines Plugins beginnt `$crypt->discard_kept_keys()` mit einem neuen Schlüssel (siehe [Secrets API](places/SecretsApi_de.md#deinstallation)). Gibt es keinen Schlüssel zum Aufbewahren, wird auch der Fingerabdruck entfernt.
 
 ## Fehler
 

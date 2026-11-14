@@ -31,6 +31,21 @@ Enthält die Secrets API den Schlüssel, kann ihn aber nicht herausgeben - der D
 
 Prüfe in diesem Fall den Website-Zustand (Site Health) von WordPress: Er meldet Secrets, die sich nicht entschlüsseln lassen.
 
+## Deinstallation
+
+`uninstall()` bewahrt den Schlüssel jeder Methode als Secret `{slug}/uninstalled-{methode}` auf, z. B. `my-plugin/uninstalled-sodium` - egal, welcher Speicherort verwendet wurde, auch wenn ein anderer erzwungen ist. Eine spätere Installation verschiebt ihn an seinen Speicherort und entfernt das Secret danach. Nur `"block_secrets_api" => true`, ein Provider, der keine neuen Secrets annimmt, oder ein Secret, das sich nicht zurücklesen lässt, führen dazu, dass er stattdessen in der Datenbank aufbewahrt wird.
+
+Lässt sich das aufbewahrte Secret bei einer späteren Installation nicht lesen, bleibt auch hier alles geschlossen: `secrets_api_unavailable` (mit `kept_key` in seinen Daten) und `key_unavailable` werden gemeldet, und es wird kein neuer Schlüssel erzeugt. Das passiert z. B., wenn die WordPress-Salts zwischenzeitlich geändert wurden und `WP_SECRETS_KEY` nicht verwendet wird. Werden die früheren Salts bzw. `WP_SECRETS_KEY` wiederhergestellt, ist der Schlüssel wieder lesbar.
+
+Ist das nicht möglich, kann dein Plugin einen Neustart mit einem neuen Schlüssel anbieten:
+
+```
+// nur nach Bestätigung durch den Nutzer: die bisher verschlüsselten Werte bleiben unlesbar.
+$crypt->discard_kept_keys();
+```
+
+Das entfernt die aufbewahrten Schlüssel - als Secret und in der Datenbank. Die nächste Verwendung erzeugt einen neuen Schlüssel und meldet `key_missing`.
+
 ## Verwendung
 
 1. Setze in der Konfiguration zum Laden von _Crypt for WordPress_ über `set_config()` die folgende Angabe:

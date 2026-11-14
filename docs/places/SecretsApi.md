@@ -31,6 +31,21 @@ If the Secrets API holds the key, but cannot hand it over - the service behind i
 
 Check the Site Health of WordPress in this case: it reports secrets which cannot be decrypted.
 
+## Uninstallation
+
+`uninstall()` keeps the key of every method as secret `{slug}/uninstalled-{method}`, e.g. `my-plugin/uninstalled-sodium` - whatever place has been used, also if another place is forced. A later installation moves it into its place and removes the secret afterward. Only `"block_secrets_api" => true`, a provider which does not accept new secrets or a secret, which cannot be read back, keep it in the database instead.
+
+If the kept secret cannot be read on a later installation, this place fails closed as well: `secrets_api_unavailable` (with `kept_key` in its data) and `key_unavailable` are reported, and no new key is generated. This happens e.g. if the WordPress salts have been changed in the meantime, while `WP_SECRETS_KEY` is not used. Restoring the former salts or `WP_SECRETS_KEY` makes the key readable again.
+
+If that is not possible, your plugin can offer to start over with a new key:
+
+```
+// only after the user has confirmed: the values encrypted so far stay unreadable.
+$crypt->discard_kept_keys();
+```
+
+It removes the kept keys - as secret and in the database. The next usage generates a new key and reports `key_missing`.
+
 ## Usage
 
 1. In the configuration for loading _Crypt for WordPress_ via `set_config()`, set the following parameter:

@@ -57,7 +57,8 @@ array(
         'force_mu_plugin => false, // true to force the usage of an MU-plugin to save the hashed key.
     )
     'sodium' => array(
-        'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen' // one of: sodium_crypto_aead_xchacha20poly1305_ietf_keygen, sodium_crypto_secretbox_keygen, sodium_crypto_auth_keygen, sodium_crypto_generichash_keygen, sodium_crypto_kdf_keygen, random_bytes 
+        'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen', // one of: sodium_crypto_aead_xchacha20poly1305_ietf_keygen, sodium_crypto_secretbox_keygen, sodium_crypto_auth_keygen, sodium_crypto_generichash_keygen, sodium_crypto_kdf_keygen, random_bytes 
+        'algorithm' => 'xchacha20poly1305', // see hints below.
     )
 )
 ```
@@ -69,6 +70,14 @@ In March 2026 you should only use one of these ciphers:
 * aes-256-gcm
 * aes-256-cbc
 * chacha20-poly1305
+
+##### Hint about the algorithm of Sodium
+
+New values are encrypted with XChaCha20-Poly1305, as WordPress does for its secrets. It needs neither special hardware nor a recent version of libsodium, so the values stay readable after a move to another server.
+
+Other values: `aegis256` (libsodium 1.0.19 or newer), `aes256gcm` (only with hardware support for AES), `chacha20poly1305`, or `auto` for the fastest one the server supports - as versions up to 4.2.0 did. Values encrypted with `aegis256` or `aes256gcm` cannot be decrypted on a server without it. If the configured algorithm is not available, XChaCha20-Poly1305 is used and `sodium_algorithm_not_available` is reported.
+
+Every value names the algorithm it has been encrypted with. Values of older versions stay readable, whatever is configured.
 
 ##### Hint about changes
 
@@ -91,6 +100,19 @@ To decrypt an encrypted string use:
 ```
 $decrypted = $crypt->decrypt( 'My encrypted string to decrypt.' );
 ```
+
+### Telling errors apart from empty values
+
+`encrypt()` and `decrypt()` return an empty string on any error. To tell a failure apart from a value without content use:
+
+```
+$decrypted = $crypt->decrypt_or_error( 'My encrypted string to decrypt.' );
+if ( is_wp_error( $decrypted ) ) {
+ // could not be decrypted.
+}
+```
+
+`encrypt_or_error()` works the same way for encrypting.
 
 ### Errors
 
@@ -121,6 +143,8 @@ $crypt = new \CryptForWordPress\Crypt( __FILE__ );
 $crypt->uninstall();
 ```
 
+The key is kept, so the values are readable again if the plugin is installed again: since WordPress 7.2 as secret with the Secrets API, otherwise in the database. See [Security model](docs/SecurityModel.md).
+
 ## Places
 
 The key, used to encrypt and decrypt strings, are saved in one place.
@@ -138,16 +162,16 @@ This package support the following places:
 | WordPressSalts      | 5             | Use a WordPress Salts as key - not recommended. Never a salt which is still the placeholder. |
 | WpConfig            | 1             | Let us save the key in your wp-config.php                    |
 
-You can add more placed as described [here](docs/Places.md).
+You can add more places as described [here](docs/Places.md). Test places and methods of your own with the [conformance tests](docs/Testing.md) of this package.
 
 ## Hooks
 
-Several hooks are provided. These always have the slug of the plugin or theme that uses the package as a prefix, followed by the abbreviation "crypt" to distinguish the hook from other hooks.
+Several hooks are provided. These always have the slug of the plugin or theme that uses the package as a prefix, mostly followed by the abbreviation "crypt" to distinguish the hook from other hooks.
 
 **Example:**
 
-Plugin: `crypt.for.wordpress-demo`
-Filter: `crypt-for-wordpress-crypt_errors`
+Plugin: `crypt-for-wordpress-demo`
+Action: `crypt-for-wordpress-demo_crypt_error`
 
 The list of hooks is available in the [Hooks](docs/hooks.md) documentation.
 
@@ -181,4 +205,6 @@ Hint: this check runs against the VIP-GO-platform which is not our target for th
 
 ## Generate documentation
 
-`vendor/bin/wp-documentor parse src  --format=markdown --output=docs/hooks.md`
+`vendor/bin/wp-documentor parse src --format=markdown --template=bin/wp-documentor-markdown.php --relative=docs --output=docs/hooks.md`
+
+This runs automatically on every pull request, which changes `src/`: the workflow "Hook documentation" commits the updated file. Every hook name has to start with a variable like `$slug` - wp-documentor cannot read a method call there. The template sorts the hooks by name, so their order does not depend on the file system.
