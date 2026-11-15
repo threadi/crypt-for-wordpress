@@ -62,6 +62,16 @@ abstract class CryptForWordPressTests extends WP_UnitTestCase {
     }
 
     /**
+     * Return whether the method Sodium can be used: with the PHP extension,
+     * or with the sodium_compat of WordPress, if the extension is missing.
+     *
+     * @return bool
+     */
+    protected static function is_sodium_usable(): bool {
+        return function_exists( 'sodium_bin2base64' ) && function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' );
+    }
+
+    /**
      * Return the path for our pseudo-plugin during tests.
      *
      * @return string

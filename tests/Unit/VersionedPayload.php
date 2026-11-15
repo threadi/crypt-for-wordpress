@@ -79,8 +79,8 @@ class VersionedPayload extends CryptForWordPressTests {
 	 * @return array{0:\CryptForWordPress\Crypt,1:\CryptForWordPress\Method_Base}
 	 */
 	private function get_method( string $method, array $config = array(), array $crypt_config = array() ): array {
-		if ( 'sodium' === $method && ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( 'sodium' === $method && ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		$cipher = $config['cipher_algorithm'] ?? '';

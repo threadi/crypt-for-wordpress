@@ -154,8 +154,8 @@ class DecryptRobustness extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_arbitrary_input_is_rejected_cleanly( string $method, array $config ): void {
-		if ( 'sodium' === $method && ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( 'sodium' === $method && ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		$cipher = $config['cipher_algorithm'] ?? '';

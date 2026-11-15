@@ -51,7 +51,7 @@ class EncryptionRoundTrip extends CryptForWordPressTests {
 		}
 
 		// Sodium, keyed with a base64 encoded key in the variant init() expects.
-		if ( extension_loaded( 'sodium' ) ) {
+		if ( self::is_sodium_usable() ) {
 			$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 			$crypt_obj->set_slug( 'roundtrip-sodium-' . uniqid( '', true ) );
 

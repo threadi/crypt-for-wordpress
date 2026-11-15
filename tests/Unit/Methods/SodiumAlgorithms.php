@@ -35,8 +35,8 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	 * @return array{0:\CryptForWordPress\Crypt,1:\CryptForWordPress\Methods\Sodium}
 	 */
 	private function get_initialized_method( array $config = array() ): array {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
@@ -184,8 +184,8 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_crypt_uses_xchacha20poly1305_by_default(): void {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
@@ -362,8 +362,8 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_every_hash_type_generates_a_usable_key( string $hash_type ): void {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );

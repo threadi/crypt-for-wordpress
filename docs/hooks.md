@@ -79,7 +79,7 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 240](../src/Methods/Sodium.php#L240-L246)
+Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 244](../src/Methods/Sodium.php#L244-L250)
 
 ### `{$slug}_crypt_database_option_name`
 

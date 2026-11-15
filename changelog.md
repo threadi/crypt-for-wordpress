@@ -18,6 +18,7 @@
 - Added the setting `'bind_site' => true`: new values are bound to the ID of the site they are encrypted on, and are not decrypted on another site of a multisite network
 - Added the setting `'legacy_format' => true`: new values are written in the format of version 4.2.0, e.g. as long as other plugins ship an older copy of this package. Together with `'bind_site'` nothing is encrypted, and "bind_site_not_possible" is reported
 - Added test vectors of the versioned payload format
+- Added tests of Sodium with the sodium_compat of WordPress - in a PHP process without the functions of the extension, and in a test run without the extension on GitHub
 
 ### Changed
 
@@ -27,6 +28,7 @@
 - The place "database" saves the key in an option, which is not loaded with every request - so it does not end up in a persistent object cache. A key saved by an older version is changed accordingly, as soon as it is loaded (WordPress 6.4 or newer)
 - Sodium encrypts new values with XChaCha20-Poly1305, as WordPress does for its secrets - not anymore with the fastest algorithm of the server. Values written with AEGIS-256 or AES-256-GCM could not be decrypted on a server without it. Values of every algorithm stay readable. `'algorithm' => 'auto'` restores the former behavior
 - Every hook name starts with the variable `$slug` now, so wp-documentor can read it. The names of the hooks are unchanged
+- The method Sodium is usable without the PHP extension "sodium": with the sodium_compat, which WordPress loads then. It writes the very same values, so values stay readable after a move to a server without the extension. `ext-sodium` is no longer required by composer.json, only suggested
 - New values are written in the versioned payload format. Versions before 4.3.0 cannot read it - see `'legacy_format'`. Values of every older format stay readable and keep their format until they are encrypted again
 
 ### Fixed

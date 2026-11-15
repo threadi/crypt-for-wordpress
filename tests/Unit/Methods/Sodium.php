@@ -62,8 +62,8 @@ class Sodium extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_tampered_payload_fails_to_decrypt(): void {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		list( $crypt_obj, $method ) = $this->get_initialized_method();
@@ -104,8 +104,8 @@ class Sodium extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_truncated_payload_fails_to_decrypt(): void {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		list( $crypt_obj, $method ) = $this->get_initialized_method( true );

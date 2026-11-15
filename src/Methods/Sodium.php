@@ -38,11 +38,15 @@ class Sodium extends Method_Base {
 	protected string $name = 'sodium';
 
 	/**
-	 * Coding-ID to use.
+	 * Coding-ID to use: SODIUM_BASE64_VARIANT_ORIGINAL.
+	 *
+	 * It is given as its value: the constant only exists with the extension
+	 * or sodium_compat. Without both, this object can still be created -
+	 * is_usable() tells then, that it cannot be used.
 	 *
 	 * @var int
 	 */
-	private int $coding_id = SODIUM_BASE64_VARIANT_ORIGINAL;
+	private int $coding_id = 1;
 
 	/**
 	 * The method configurations.
@@ -249,10 +253,23 @@ class Sodium extends Method_Base {
 	/**
 	 * Return whether this method is usable in this hosting.
 	 *
+	 * It is, if the functions it needs are there: from the PHP extension
+	 * "sodium", or from sodium_compat, which WordPress ships and loads if
+	 * the extension is missing (wp-includes/compat.php). Both write the very
+	 * same values, so a value encrypted with one is decrypted with the other.
+	 * sodium_compat is written in PHP and slower, but fast enough for values
+	 * of this size.
+	 *
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return extension_loaded( 'sodium' );
+		// bail if the values cannot be encoded.
+		if ( ! function_exists( 'sodium_bin2base64' ) || ! function_exists( 'sodium_base642bin' ) ) {
+			return false;
+		}
+
+		// usable with the default algorithm or the fallback for very old versions of libsodium.
+		return $this->is_algorithm_available( self::ALGO_XCHACHA20POLY1305 ) || $this->is_algorithm_available( self::ALGO_CHACHA20POLY1305 );
 	}
 
 	/**

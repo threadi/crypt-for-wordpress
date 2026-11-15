@@ -28,6 +28,7 @@ See: [What this package protects against - and what not](docs/SecurityModel.md)
 ## Requirements
 
 * [_composer_]([composer](https://getcomposer.org/)) to install this package.
+* PHP 8.2 or newer with the extension OpenSSL. The extension Sodium is optional: without it, the method Sodium uses the sodium_compat WordPress ships (see below).
 * WordPress-plugin or theme to embed them in your project.
 
 ## Installation
@@ -80,6 +81,12 @@ New values are encrypted with XChaCha20-Poly1305, as WordPress does for its secr
 Other values: `aegis256` (libsodium 1.0.19 or newer), `aes256gcm` (only with hardware support for AES), `chacha20poly1305`, or `auto` for the fastest one the server supports - as versions up to 4.2.0 did. Values encrypted with `aegis256` or `aes256gcm` cannot be decrypted on a server without it. If the configured algorithm is not available, XChaCha20-Poly1305 is used and `sodium_algorithm_not_available` is reported.
 
 Every value names the algorithm it has been encrypted with. Values of older versions stay readable, whatever is configured.
+
+##### Hint about Sodium without the PHP extension
+
+Without the PHP extension "sodium", WordPress loads its sodium_compat - a version of libsodium written in PHP. The method Sodium uses it then. Both write the very same values: a value encrypted with the extension is decrypted with sodium_compat, and the other way round. So the values stay readable after a move to a server without the extension. sodium_compat is slower, but fast enough for values of this size.
+
+sodium_compat knows AEGIS-256 as well. With `'algorithm' => 'auto'` it is chosen there - and its values cannot be decrypted on a server, whose extension has a libsodium older than 1.0.19. The default XChaCha20-Poly1305 works everywhere.
 
 ##### Hint about the format of the values
 

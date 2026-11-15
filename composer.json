@@ -62,7 +62,9 @@
   },
   "require": {
     "php": ">=8.2",
-    "ext-openssl": "*",
-    "ext-sodium": "*"
+    "ext-openssl": "*"
+  },
+  "suggest": {
+    "ext-sodium": "Faster encryption with the method Sodium. Without it, the sodium_compat of WordPress is used, which writes the same values."
   }
 }

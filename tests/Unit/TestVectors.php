@@ -80,7 +80,7 @@ class TestVectors extends CryptForWordPressTests {
 	 * @return bool
 	 */
 	private function is_supported( array $vector ): bool {
-		if ( 'sodium' === $vector['method'] && ! extension_loaded( 'sodium' ) ) {
+		if ( 'sodium' === $vector['method'] && ! self::is_sodium_usable() ) {
 			return false;
 		}
 

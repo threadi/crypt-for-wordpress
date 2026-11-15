@@ -60,16 +60,21 @@ class LegacyCryptClass extends CryptForWordPressTests {
 			$this->markTestSkipped( 'Running a PHP process is not possible here.' );
 		}
 
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		$script = <<<'PHP'
 <?php
 namespace {
-	list( , $src_path, $scenario ) = $argv;
+	list( , $src_path, $scenario, $sodium_compat ) = $argv;
 
 	define( 'ABSPATH', '/' );
+
+	// without the extension: the sodium_compat of WordPress, as WordPress loads it.
+	if ( ! function_exists( 'sodium_crypto_box' ) ) {
+		require $sodium_compat;
+	}
 
 	// the options of WordPress, in memory.
 	$GLOBALS['options'] = array();
@@ -194,7 +199,7 @@ PHP;
 		$this->script_path = sys_get_temp_dir() . '/crypt-for-wordpress-legacy-crypt-' . uniqid( '', true ) . '.php';
 		file_put_contents( $this->script_path, $script );
 
-		$output = shell_exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $this->script_path ) . ' ' . escapeshellarg( dirname( __DIR__, 2 ) . '/src' ) . ' ' . escapeshellarg( $scenario ) . ' 2>&1' );
+		$output = shell_exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $this->script_path ) . ' ' . escapeshellarg( dirname( __DIR__, 2 ) . '/src' ) . ' ' . escapeshellarg( $scenario ) . ' ' . escapeshellarg( ABSPATH . WPINC . '/sodium_compat/autoload.php' ) . ' 2>&1' );
 		$result = json_decode( (string) $output, true );
 
 		$this->assertIsArray( $result, (string) $output );
