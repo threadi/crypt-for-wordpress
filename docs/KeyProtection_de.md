@@ -14,6 +14,8 @@ Dasselbe gilt, wenn ein Schlüssel gefunden wird, der nicht der bisher verwendet
 
 Beide Fehler werden **einmal** gemeldet - in dem Request, der es bemerkt. Danach ist der neue Schlüssel der bekannte. Wenn du deinen Nutzern mitteilen willst, warum sie gespeicherte Werte neu eingeben müssen, verarbeite den Fehler dort, wo er auftritt, z. B. indem du einen Hinweis speicherst (siehe [Handhabung von Fehlern](ErrorHandling_de.md)).
 
+Auch jeder einzelne Wert nennt seinen Schlüssel (seit Version 4.3.0, siehe [Das Format verschlüsselter Werte](PayloadFormat_de.md)). Ein Wert eines anderen als des verwendeten Schlüssels wird bei jedem Entschlüsseln als `key_mismatch` gemeldet - nicht nur einmal.
+
 Bevor ein Schlüssel als fehlend behandelt wird, werden die anderen unterstützten Speicherorte danach durchsucht - nicht nur der aktive. Ein in der Datenbank oder in einer individuellen Datei gespeicherter Schlüssel wird also auch dann noch gefunden, wenn die wp-config.php inzwischen beschreibbar ist. Er wird von dort genutzt, wo er liegt, und die Warnung `key_in_inactive_place` wird gemeldet.
 
 Ein neuer Schlüssel wird erst verwendet, wenn er an seinem Speicherort angekommen ist. Schlägt das Speichern am aktiven Speicherort fehl, wird der nächste nutzbare versucht (Warnung `key_saved_in_fallback_place`, siehe [Speicherorte](Places_de.md)). Schlägt es überall fehl, wird nichts verschlüsselt: `encrypt()` liefert einen leeren String und `key_not_saved` wird gemeldet. Ein Wert, der mit einem nur für einen Request existierenden Schlüssel verschlüsselt wurde, wäre nie wieder lesbar.
@@ -33,6 +35,7 @@ In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schl
 | `key_unavailable`       | Ein Speicherort enthält den Schlüssel, kann ihn aber gerade nicht herausgeben (z.B. die [Secrets API](places/SecretsApi_de.md)). Es wird kein neuer Schlüssel erzeugt, nichts verschlüsselt. |
 | `key_in_inactive_place` | Warnung: Der Schlüssel wurde an einem anderen als dem aktiven Speicherort gefunden. Er wird von dort genutzt.                |
 | `key_saved_in_fallback_place` | Warnung: Ein neuer Schlüssel konnte nicht am aktiven Speicherort gespeichert werden und liegt stattdessen am nächsten nutzbaren. Die Daten nennen `failed_places` und `saved_in`. |
+| `key_mismatch`          | Ein Wert wurde mit einem anderen als dem verwendeten Schlüssel verschlüsselt. Die Daten nennen `key_id` und `current_key_id`. Wird für jeden solchen Wert gemeldet. |
 
 ## Wann passiert das?
 
@@ -44,3 +47,5 @@ In einem Multisite-Netzwerk wird der Fingerabdruck dort gespeichert, wo der Schl
 ## Die Werte zurückbekommen
 
 Die mit dem früheren Schlüssel verschlüsselten Werte werden nicht gelöscht. Wird der frühere Schlüssel wiederhergestellt - die ursprüngliche Zeile `define( '...-HASH', '...' );` in der wp-config.php oder das erzeugte Must-Use-Plugin -, sind sie wieder lesbar. Für diesen Wechsel wird noch einmal `key_changed` gemeldet, und unlesbar sind dann die Werte, die zwischenzeitlich mit dem anderen Schlüssel verschlüsselt wurden.
+
+Welchen Schlüssel ein Wert braucht, verraten die Daten von `key_mismatch`: `key_id` ist der Fingerabdruck seines Schlüssels. Deine Backups der Datenbank enthalten den Fingerabdruck des Schlüssels, der zu ihrer Zeit verwendet wurde, in der Option `{slug}_crypt_key_id_{method}`. Das Backup der Dateien aus der Zeit, in der er übereinstimmt, enthält den Schlüssel. Diesen Schlüssel aufzubewahren ist Aufgabe deiner Backups: Das Package bewahrt selbst nie eine Kopie eines früheren Schlüssels auf.

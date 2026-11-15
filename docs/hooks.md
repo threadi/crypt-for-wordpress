@@ -61,7 +61,7 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Method_Base.php](../src/Method_Base.php), [line 309](../src/Method_Base.php#L309-L315)
+Source: [src/Method_Base.php](../src/Method_Base.php), [line 346](../src/Method_Base.php#L346-L352)
 
 ### `{$slug}_crypt_constant`
 
@@ -79,7 +79,7 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 236](../src/Methods/Sodium.php#L236-L242)
+Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 240](../src/Methods/Sodium.php#L240-L246)
 
 ### `{$slug}_crypt_database_option_name`
 

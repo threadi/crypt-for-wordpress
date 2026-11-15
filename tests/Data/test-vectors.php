@@ -6,8 +6,10 @@
  * vector - add new ones for new formats. If a test with one of these fails,
  * a change of the package makes existing data of websites unreadable.
  *
- * Generated with version 4.1.0. Each vector holds the method, the stored
- * key (as it would be in wp-config.php), the configuration of the method,
+ * Generated with version 4.1.0, the ones named "versioned" with version
+ * 4.3.0. Those ending in "site" are bound to the site with ID 1 ('bind_site').
+ * Each vector holds the method, the stored key (as it would be in
+ * wp-config.php), the configuration of the method,
  * the context, the encrypted value and the plain text. "requires" names a
  * function (or "aes256gcm") the server needs to decrypt it.
  *
@@ -171,5 +173,125 @@ return array(
 		'requires' => 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt',
 		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
 		'value'    => 'BM2swiIazilsX0lAzmpIXKsJpR8wVQMjOSRFcF47fApg6GEliPH52bOhq0iNqaxeT5V7cF2ZEjLxMNSNkZaB+3KuYYYwew+/HX80hj9m08FEVQ==',
+	),
+
+	// the versioned payload format of version 4.3.0: header with format version
+	// and key ID, authenticated together with the value.
+	'openssl-versioned-aes-256-gcm' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array(),
+		'context'  => '',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQCErmFq8kvjjSXiqyzS2DOh14RewA7khi/ttAO8QD6BJxvRNky6Ms5NvSI63xbLec3Eomn8Blijm0eu4lvF1TyVoaxhdNuJU2c7YENumQQhLEEqzhiswqFLLw==',
+	),
+	'openssl-versioned-aes-256-gcm-context' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array(),
+		'context'  => 'api_secret',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQCErmFq8kvjjcMCP0hclrOVsOc4aLZII6bg7iKVYVKNC9qNfhm91si5AT+qLoYMdao9gaJeJ0UT8TxSB/vwZdLRKm6t+9M3DwroYeVEiwt7qjY3j00YXrNQ5g==',
+	),
+	'openssl-versioned-aes-256-gcm-pbkdf2-context' => array(
+		'method'   => 'openssl',
+		'key'      => '30kr83ojXNpXtpiVo8+Cfw5GQl4s6D6t2XAffLn1cFM=',
+		'config'   => array( 'hash_type' => 'hash_pbkdf2' ),
+		'context'  => 'api_secret',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQCTbKmj/+F82Hwhik4575Cbfhwi4TxIXou7NWqqhRvK3BR9ac8xOYYjSjxQHLU9Ki+Bk2gWc1+LFRkPfIb5vUkvBiX3CkutTopwyulFkbPV7P4kQ4OAQDjx/A==',
+	),
+	'openssl-versioned-aes-256-gcm-site' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array(),
+		'context'  => 'api_secret',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQGErmFq8kvjjT0g4xDrbEzVo1Ot6g8XMyhIvQ8QX42T6eqd2I5RzZ+bGyWs7f1QkmUcZTSKzk1GgMJjsZEeeZ9aLtxJWe1q0QQytFZ3mWvBxYUBW546zIHykQ==',
+	),
+	'openssl-versioned-chacha20-poly1305-context' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array( 'cipher_algorithm' => 'chacha20-poly1305' ),
+		'context'  => 'api_secret',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQCErmFq8kvjjTiutV2PpVWJIDPqITNzhu+LAauThtOD8dJI2rclqn8JRKStYtTWMIvuMUkALZV2YP7kblE5pEv64ZtXnZdLf2QbQ5WSLo+CQqHxSIR7KJnctg==',
+	),
+	'openssl-versioned-aes-256-cbc' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array( 'cipher_algorithm' => 'aes-256-cbc' ),
+		'context'  => '',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQCErmFq8kvjjZsfFRjgWITYtUJOXNPWmF/QLBTSMPiVvzcfLBUDYkWc7nVCbOG/qc5CNfEnPqn2pYjY0MZ0DnS3tChN3u3pebGi5Fps9wrsN8t4yQHDSjCEsxRM0rS2HHbN1lKX1IZ4RR8xdzeDpCDL+tM+K5jmQBU=',
+	),
+	'openssl-versioned-aes-256-cbc-context' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array( 'cipher_algorithm' => 'aes-256-cbc' ),
+		'context'  => 'api_secret',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQCErmFq8kvjjWw8qpbvVgRs4sMDEWIGjXsCagEi91LOs24a/mcoantZLddzxjQXrTNW6+p/Zls096ke3/l2bf0hDLZAi/Rz9VWV2/IH3D4+Y3dyZIvndoRbzPBoXs6vVfr0VeTUyz7csBWjk+WGs344rw+7WAfmhBA=',
+	),
+	'openssl-versioned-aes-256-cbc-site' => array(
+		'method'   => 'openssl',
+		'key'      => 'afb7e4875f355e8e74e021abd9cde65b7086b5a36eacbfcd1a9228903352fce6',
+		'config'   => array( 'cipher_algorithm' => 'aes-256-cbc' ),
+		'context'  => 'api_secret',
+		'requires' => '',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQGErmFq8kvjjQqNy8mBZl3nkRDZu3euvsba/8zZvQhoynd+1/ET0V11bX2FDYGc1yYHchhh4E2XnIiYHvwRzat7jb9DynsyCSbrv7TvAYanF1gP+9IW/ysmPWmmi2uPToUfhri6Xf8p3peJLtLyqnFZKpI8GCcHT04=',
+	),
+	'sodium-versioned-xchacha20poly1305' => array(
+		'method'   => 'sodium',
+		'key'      => 'pSUuDLNl1QH7DfvLCDs7JVEpa/2c8WbQ4siQppkQ/+U=',
+		'config'   => array(),
+		'context'  => '',
+		'requires' => 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQBL4PNRirwi2QPv5Md6YU9Bl7Kl3BSL6VGq+LBn0Tx0CAuCNRvq6kEi2HAiMRgaqMVDsqRgNxz3Dm5Dy4eYq14RIkmjwmJOODxLfy7nEGD7S1TBnx9RqIed1x5eJE+5J3nsLmOj8X0=',
+	),
+	'sodium-versioned-xchacha20poly1305-context' => array(
+		'method'   => 'sodium',
+		'key'      => 'pSUuDLNl1QH7DfvLCDs7JVEpa/2c8WbQ4siQppkQ/+U=',
+		'config'   => array(),
+		'context'  => 'api_secret',
+		'requires' => 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQBL4PNRirwi2QNz27frCxFFKtJR78Qi0qs/nJUs0/KwxpnAaqNI/lh/4C56EqPkicMpX/DGD0jx8HjXlY3CGUZN4Fk9hP+XgeXts+H4NQ3Qrel9SA+8OH8RJNlDjLNIYs6/GoGZWWk=',
+	),
+	'sodium-versioned-xchacha20poly1305-site' => array(
+		'method'   => 'sodium',
+		'key'      => 'pSUuDLNl1QH7DfvLCDs7JVEpa/2c8WbQ4siQppkQ/+U=',
+		'config'   => array(),
+		'context'  => 'api_secret',
+		'requires' => 'sodium_crypto_aead_xchacha20poly1305_ietf_decrypt',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQFL4PNRirwi2QPbz0wBt2d7XA8lxOsh4PfyicnA9GkxMdGi20C1GGTzXFjIFakKrPmr8oYsE8TQ479fVbtE2f+OA/udpBRVZRSunj3s8fuhHs6wLaQLc+XQXp1EiFMgvp2tF+5IoMc=',
+	),
+	'sodium-versioned-aes256gcm-context' => array(
+		'method'   => 'sodium',
+		'key'      => 'pSUuDLNl1QH7DfvLCDs7JVEpa/2c8WbQ4siQppkQ/+U=',
+		'config'   => array( 'algorithm' => 'aes256gcm' ),
+		'context'  => 'api_secret',
+		'requires' => 'aes256gcm',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQBL4PNRirwi2QJ9taCwpnxB6iXhCjRihBb/wfJktY0OYqzhVYDQKMPbjCAA5gQyLnC9KZuxYzllfPoeagp072shEstQnz+b9mFv3kFKgBlmmQ41tLDn3OtQ6wU=',
+	),
+	'sodium-versioned-chacha20poly1305-context' => array(
+		'method'   => 'sodium',
+		'key'      => 'pSUuDLNl1QH7DfvLCDs7JVEpa/2c8WbQ4siQppkQ/+U=',
+		'config'   => array( 'algorithm' => 'chacha20poly1305' ),
+		'context'  => 'api_secret',
+		'requires' => 'sodium_crypto_aead_chacha20poly1305_ietf_decrypt',
+		'plain'    => "Hällo Wörld – 🔐 test vector\nwith a second line",
+		'value'    => '80NXAQBL4PNRirwi2QT8tqXBmVQQ57wfZIOBngwdeWH9BVGRk12BkdoqTGDjjjexauWz0F+ALMF6fjsqv5PSJ2k9U2noRC8vsJXyty0woGdkUKxfbxkL95RklBV+a/c=',
 	),
 );

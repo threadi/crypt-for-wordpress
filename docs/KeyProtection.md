@@ -14,6 +14,8 @@ The same applies if a key is found which is not the one used so far: it is used,
 
 Both errors are reported **once** - in the request that notices it. From then on the new key is the known one. If you want to tell your users why their saved values have to be entered again, handle the error where it occurs, e.g. by saving a notice (see [Error Handling](ErrorHandling.md)).
 
+Every single value names its key as well (since version 4.3.0, see [The format of encrypted values](PayloadFormat.md)). A value of another key than the one in use is reported as `key_mismatch` whenever it is decrypted - not only once.
+
 Before a key is treated as missing, the other supported places are searched for it - not only the active one. A key that has been saved in the database or in a custom file is still found after the wp-config.php became writable. It is used from where it is, and the warning `key_in_inactive_place` is reported.
 
 A new key is only used once it has been saved in its place. If saving in the active place fails, the next usable one is tried (warning `key_saved_in_fallback_place`, see [Places](Places.md)). If it fails everywhere, nothing is encrypted: `encrypt()` returns an empty string and `key_not_saved` is reported. A value encrypted with a key that only exists during one request could never be read again.
@@ -33,6 +35,7 @@ On a multisite network the fingerprint is saved where the key lives: for the who
 | `key_unavailable`       | A place holds the key, but cannot hand it over right now (e.g., the [Secrets API](places/SecretsApi.md)). No new key is generated, nothing is encrypted. |
 | `key_in_inactive_place` | Warning: the key has been found in another place than the active one. It is used from there.                      |
 | `key_saved_in_fallback_place` | Warning: a new key could not be saved in the active place and has been saved in the next usable one instead. The data holds `failed_places` and `saved_in`. |
+| `key_mismatch`          | A value has been encrypted with another key than the one in use. The data holds `key_id` and `current_key_id`. Reported for every such value. |
 
 ## When does this happen?
 
@@ -44,3 +47,5 @@ On a multisite network the fingerprint is saved where the key lives: for the who
 ## Getting the values back
 
 The values encrypted with the former key are not deleted. If the former key is restored - the original `define( '...-HASH', '...' );` line in the wp-config.php, or the generated Must-Use plugin - they are readable again. `key_changed` is reported once more for this change, and the values encrypted in the meantime with the other key are the ones that cannot be read then.
+
+To find out which key a value needs, look at the data of `key_mismatch`: `key_id` is the fingerprint of its key. Your backups of the database hold the fingerprint of the key used at their time, in the option `{slug}_crypt_key_id_{method}`. The backup of the files from the time, in which it matches, holds the key. Keeping this key is the job of your backups: the package never keeps a copy of a former key itself.

@@ -6,7 +6,8 @@ _Crypt for WordPress_ encrypts values before they are saved in the database. The
 
 * **The database in the wrong hands**: a dump, a backup, an export, access via phpMyAdmin or a vulnerability which allows reading the database (SQL injection) - in your plugin or in any other one. The values are unreadable without the key.
 * **Changed values**: a value that has been changed in the database is not decrypted. `decrypt()` returns an empty string and reports an error. For values an older version wrote with a cipher without AEAD (not the default) this holds once they have been encrypted again.
-* **Moved values**: with a [context](Context.md), an encrypted value copied into another field is not decrypted there: `$crypt->encrypt( $value, 'api_secret' )`.
+* **Moved values**: with a [context](Context.md), an encrypted value copied into another field is not decrypted there: `$crypt->encrypt( $value, 'api_secret' )`. On a multisite network, `'bind_site' => true` additionally prevents decrypting it on another site, see [The format of encrypted values](PayloadFormat.md).
+* **Values passed off as another format**: every value names the version of its format and its key, authenticated together with it. A value cannot be passed off as one of an older format, and a value of another key is reported as `key_mismatch` (since version 4.3.0).
 * **Stack traces**: PHP replaces the text to encrypt and the key in stack traces, wherever they are arguments of a function of this package. So they do not end up in the error log or in an error tracker this way. Functions of WordPress, of your own code and of methods and places of your own are not covered by this.
 
 All of this only holds as long as the key is not in the database as well:

@@ -20,7 +20,7 @@ if ( is_wp_error( $value ) ) {
 ```
 
 - The first code of the `WP_Error` is `encrypt_failed` or `decrypt_failed`, with the context of the value in its data.
-- Its other codes are the errors reported during this call, e.g. `key_unavailable`, `no_key_available` or `sodium_decrypt_error`. On the first usage in a request this includes what has been reported while the key has been loaded - it is the reason the value could not be handled.
+- Its other codes are the errors reported during this call, e.g. `key_unavailable`, `no_key_available`, `key_mismatch` (a value of another key, see [The format of encrypted values](PayloadFormat.md)) or `sodium_decrypt_error`. On the first usage in a request this includes what has been reported while the key has been loaded - it is the reason the value could not be handled.
 - An empty value is no error: `decrypt_or_error( '' )` returns an empty string. A value, whose content is empty, is no error either.
 - Warnings, which do not prevent the encryption - e.g. `insecure_place_database` or `key_in_inactive_place` - do not turn the result into a `WP_Error`. They are collected in `get_errors()` as before.
 - Every error is collected in `get_errors()` and passed to the hook below as well - once. The `WP_Error` returned is not passed to the hook again.

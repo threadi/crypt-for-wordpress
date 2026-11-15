@@ -97,6 +97,28 @@ PHP;
 	}
 
 	/**
+	 * Return IV, tag and ciphertext of a value OpenSSL has encrypted with an
+	 * AEAD cipher - in the versioned format or in the one of version 4.2.0.
+	 *
+	 * @param string $encrypted The encrypted value.
+	 *
+	 * @return array{0:string,1:string,2:string}
+	 */
+	private function get_aead_parts( string $encrypted ): array {
+		$payload = (string) base64_decode( $encrypted, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+
+		// the versioned format: [header of 13 bytes][IV of 12 bytes][tag of 16 bytes][ciphertext].
+		if ( str_starts_with( $payload, "\xF3CW" ) ) {
+			return array( substr( $payload, 13, 12 ), substr( $payload, 25, 16 ), substr( $payload, 41 ) );
+		}
+
+		// the format of version 4.2.0.
+		$parts = explode( ':', $payload );
+
+		return array( (string) base64_decode( $parts[0], true ), (string) base64_decode( $parts[1], true ), (string) base64_decode( $parts[2], true ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+	}
+
+	/**
 	 * Return the constant the given method reads its key from.
 	 *
 	 * @param \CryptForWordPress\Crypt $crypt_obj The crypt object.
@@ -471,8 +493,8 @@ PHP;
 			// a real key has been saved, and the value is not readable without it.
 			$this->assertMatchesRegularExpression( '/^[0-9a-f]{64}$/', (string) get_option( $crypt_obj->get_slug() . '-hash' ) );
 
-			$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
-			$this->assertFalse( openssl_decrypt( (string) base64_decode( $parts[2], true ), 'aes-256-gcm', '', OPENSSL_RAW_DATA, (string) base64_decode( $parts[0], true ), (string) base64_decode( $parts[1], true ) ) );
+			list( $iv, $tag, $ciphertext ) = $this->get_aead_parts( $encrypted );
+			$this->assertFalse( openssl_decrypt( $ciphertext, 'aes-256-gcm', '', OPENSSL_RAW_DATA, $iv, $tag ) );
 		}
 	}
 
@@ -950,9 +972,9 @@ PHP;
 			$this->assertNotContains( 'openssl_unprotected_value', (array) $crypt_obj->get_errors()?->get_error_codes(), $cipher );
 
 			// it is not readable without the key.
-			$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
 			if ( 'AES-256-GCM' === $cipher ) {
-				$this->assertFalse( openssl_decrypt( (string) base64_decode( $parts[2], true ), 'aes-256-gcm', '', OPENSSL_RAW_DATA, (string) base64_decode( $parts[0], true ), (string) base64_decode( $parts[1], true ) ) );
+				list( $iv, $tag, $ciphertext ) = $this->get_aead_parts( $encrypted );
+				$this->assertFalse( openssl_decrypt( $ciphertext, 'aes-256-gcm', '', OPENSSL_RAW_DATA, $iv, $tag ) );
 			}
 
 			// and another self-chosen key does not read it.

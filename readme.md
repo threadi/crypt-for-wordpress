@@ -51,6 +51,8 @@ Format:
 array(
     'force_method' => 'openssl', // openssl or sodium.
     'force_place' => 'wpconfig', // one of the supported places.
+    'bind_site' => false, // true to bind new values to the site of a multisite network they are encrypted on.
+    'legacy_format' => false, // true to write new values in the format of version 4.2.0, which older versions can read.
     'openssl' => array(
         'hash_type' => 'hash_pbkdf2', // hash_pbkdf2 or hash.
         'hash_algorithm' => 'sha256' // see hints below.
@@ -78,6 +80,12 @@ New values are encrypted with XChaCha20-Poly1305, as WordPress does for its secr
 Other values: `aegis256` (libsodium 1.0.19 or newer), `aes256gcm` (only with hardware support for AES), `chacha20poly1305`, or `auto` for the fastest one the server supports - as versions up to 4.2.0 did. Values encrypted with `aegis256` or `aes256gcm` cannot be decrypted on a server without it. If the configured algorithm is not available, XChaCha20-Poly1305 is used and `sodium_algorithm_not_available` is reported.
 
 Every value names the algorithm it has been encrypted with. Values of older versions stay readable, whatever is configured.
+
+##### Hint about the format of the values
+
+Since version 4.3.0 every value names the version of its format and the ID of its key, authenticated together with the value. A value of another key is reported as `key_mismatch`. Versions before 4.3.0 cannot read this format - set `'legacy_format' => true` for a transition, if they may have to. Values of older versions stay readable.
+
+See: [The format of encrypted values](docs/PayloadFormat.md)
 
 ##### Hint about changes
 

@@ -24,6 +24,10 @@ use SodiumException;
  *
  * Every value names the algorithm it has been encrypted with, so values of
  * every algorithm stay readable - wherever the server supports it.
+ *
+ * New values are written in the versioned payload format, see
+ * Method_Base::create_payload_header(): [header][algorithm][nonce][ciphertext].
+ * Values of version 4.2.0 and older have no header.
  */
 class Sodium extends Method_Base {
 	/**
@@ -472,6 +476,11 @@ class Sodium extends Method_Base {
 			return '';
 		}
 
+		// bail if the settings for the payload format contradict each other.
+		if ( ! $this->is_payload_format_configured( $context ) ) {
+			return '';
+		}
+
 		try {
 			// get the algorithm to encrypt with: the portable default, unless configured otherwise.
 			$algorithm = $this->detect_algorithm();
@@ -479,8 +488,21 @@ class Sodium extends Method_Base {
 			// nonce length depends on the algorithm, never hardcoded.
 			$nonce = random_bytes( self::NONCE_LENGTHS[ $algorithm ] );
 
+			// get what is written in front of the nonce, and what the value is authenticated with.
+			if ( $this->uses_versioned_payload() ) {
+				// the versioned format: the header names the format and the key, and
+				// is authenticated together with the algorithm and the context.
+				$header          = $this->create_payload_header();
+				$prefix          = $header['bytes'] . chr( $algorithm );
+				$additional_data = $this->get_additional_data( $header, chr( $algorithm ), $context );
+			} else {
+				// the format of version 4.2.0: only the algorithm, and only the context is authenticated.
+				$prefix          = chr( $algorithm );
+				$additional_data = $context;
+			}
+
 			// get the algorithm to use.
-			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce, $context );
+			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce, $additional_data );
 
 			if ( false === $encrypted_text ) {
 				// log this error.
@@ -496,10 +518,11 @@ class Sodium extends Method_Base {
 				return '';
 			}
 
-			// payload layout: [1 byte algo-id][nonce][ciphertext] - no separator
+			// payload layout: [header][1 byte algo-id][nonce][ciphertext] - or,
+			// in the format of version 4.2.0, without the header. No separator
 			// character is used, so binary ':' bytes in the nonce/ciphertext can
 			// never corrupt the structure (unlike the previous explode(':', ...) approach).
-			$payload = chr( $algorithm ) . $nonce . $encrypted_text;
+			$payload = $prefix . $nonce . $encrypted_text;
 
 			// return encrypted text as base64.
 			return sodium_bin2base64( $payload, $this->get_coding_id() );
@@ -566,8 +589,22 @@ class Sodium extends Method_Base {
 			// get the payload.
 			$payload = sodium_base642bin( $encrypted_text, $this->get_coding_id() );
 
+			// a value in the versioned format begins with a header, which names
+			// the version of its format and its key. Values of version 4.2.0 and
+			// older begin with the algorithm right away - never with the header.
+			$header = $this->read_payload_header( $payload );
+
+			// bail if the value has been written by a newer version, in a format this one cannot read.
+			if ( null !== $header && ! $this->is_payload_header_supported( $header ) ) {
+				$this->report_unsupported_payload( $header, $context );
+				return '';
+			}
+
+			// get where the algorithm begins.
+			$offset = null === $header ? 0 : strlen( $header['bytes'] );
+
 			// need at least the algo byte + the smallest possible nonce.
-			if ( strlen( $payload ) < 2 ) {
+			if ( strlen( $payload ) < $offset + 2 ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_payload_not_set',
@@ -581,7 +618,7 @@ class Sodium extends Method_Base {
 				return '';
 			}
 
-			$algorithm = ord( $payload[0] );
+			$algorithm = ord( $payload[ $offset ] );
 
 			if ( ! isset( self::NONCE_LENGTHS[ $algorithm ] ) ) {
 				// log this error.
@@ -601,7 +638,7 @@ class Sodium extends Method_Base {
 			// get the length.
 			$nonce_length = self::NONCE_LENGTHS[ $algorithm ];
 
-			if ( strlen( $payload ) < 1 + $nonce_length ) {
+			if ( strlen( $payload ) < $offset + 1 + $nonce_length ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_payload_mismatch',
@@ -617,13 +654,22 @@ class Sodium extends Method_Base {
 			}
 
 			// get the nonce.
-			$nonce      = substr( $payload, 1, $nonce_length );
-			$ciphertext = substr( $payload, 1 + $nonce_length );
+			$nonce      = substr( $payload, $offset + 1, $nonce_length );
+			$ciphertext = substr( $payload, $offset + 1 + $nonce_length );
 
-			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce, $context );
+			// get what the value has been authenticated with: in the versioned
+			// format the header and the algorithm as well, not only the context.
+			$additional_data = null === $header ? $context : $this->get_additional_data( $header, chr( $algorithm ), $context );
+
+			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce, $additional_data );
 
 			// bail if the decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
+				// bail if the value names another key than the one in use: this is the reason.
+				if ( null !== $header && $this->report_other_key( $header, $context ) ) {
+					return '';
+				}
+
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_decrypt_error',

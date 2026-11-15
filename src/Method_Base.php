@@ -24,6 +24,43 @@ class Method_Base {
 	protected string $name = '';
 
 	/**
+	 * The first bytes of every value in the versioned payload format.
+	 *
+	 * None of the formats of earlier versions can begin with them: the
+	 * values of Sodium begin with the number of their algorithm (1 to 4),
+	 * the ones of OpenSSL with a base64 character. Only the very first
+	 * format of OpenSSL for ciphers without AEAD begins with random bytes,
+	 * see OpenSsl::decrypt_with_context().
+	 */
+	private const PAYLOAD_MAGIC = "\xF3CW";
+
+	/**
+	 * The version of the payload format this package writes.
+	 */
+	private const PAYLOAD_VERSION = 1;
+
+	/**
+	 * Flag in the payload header: the value is bound to the site it has
+	 * been encrypted on.
+	 */
+	private const PAYLOAD_FLAG_SITE = 1;
+
+	/**
+	 * Every flag this version of the payload format knows.
+	 */
+	private const PAYLOAD_FLAGS_KNOWN = self::PAYLOAD_FLAG_SITE;
+
+	/**
+	 * Length of the key ID in the payload header, in bytes.
+	 */
+	private const PAYLOAD_KEY_ID_LENGTH = 8;
+
+	/**
+	 * Length of the payload header, in bytes: magic, version, flags, key ID.
+	 */
+	private const PAYLOAD_HEADER_LENGTH = 13;
+
+	/**
 	 * The hash for encryption.
 	 *
 	 * @var string
@@ -1085,6 +1122,242 @@ class Method_Base {
 		);
 
 		return false;
+	}
+
+	/**
+	 * Return a setting of the Crypt object, which is not one of a method.
+	 *
+	 * @param string $name The name of the setting.
+	 *
+	 * @return mixed The value, or null if it is not set.
+	 */
+	private function get_global_setting( string $name ): mixed {
+		// bail if the Crypt class cannot hand out its settings (an older copy of this package).
+		if ( ! method_exists( $this->get_crypt_obj(), 'get_config' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return null;
+		}
+
+		$configuration = $this->get_crypt_obj()->get_config();
+
+		return $configuration[ $name ] ?? null;
+	}
+
+	/**
+	 * Return whether new values are written in the versioned payload format.
+	 *
+	 * This is the default since version 4.3.0. Older copies of this package
+	 * cannot read it. With 'legacy_format' => true, new values are written
+	 * in the format of version 4.2.0 instead - e.g. as long as other plugins
+	 * of the website ship an older copy of this package, which may be the
+	 * one in use, see docs/MultiplePlugins.md. Values of both formats are
+	 * read in any case.
+	 *
+	 * 'bind_site' needs the versioned format: with both settings nothing is
+	 * encrypted, see is_payload_format_configured().
+	 *
+	 * @return bool
+	 */
+	protected function uses_versioned_payload(): bool {
+		return ! (bool) $this->get_global_setting( 'legacy_format' );
+	}
+
+	/**
+	 * Return whether the settings for the payload format can be met, and
+	 * report it if not.
+	 *
+	 * A value is never encrypted without the binding to its site, if this
+	 * has been requested: the format of version 4.2.0, requested with
+	 * 'legacy_format', cannot hold it.
+	 *
+	 * @param string $context The context of the value.
+	 *
+	 * @return bool
+	 */
+	protected function is_payload_format_configured( string $context ): bool {
+		// bail if the settings do not contradict each other.
+		if ( $this->uses_versioned_payload() || ! $this->is_site_binding_requested() ) {
+			return true;
+		}
+
+		// log this error.
+		$this->get_crypt_obj()->add_error(
+			'bind_site_not_possible',
+			'A value cannot be bound to its site in the format of version 4.2.0. Remove one of the settings "bind_site" and "legacy_format".',
+			array(
+				'method'  => $this->get_name(),
+				'context' => $context,
+			)
+		);
+
+		return false;
+	}
+
+	/**
+	 * Return whether new values should be bound to the site they are
+	 * encrypted on.
+	 *
+	 * @return bool
+	 */
+	private function is_site_binding_requested(): bool {
+		return (bool) $this->get_global_setting( 'bind_site' );
+	}
+
+	/**
+	 * Return the ID of the key in use, as it is written into a payload.
+	 *
+	 * It is the fingerprint, which is remembered for this installation as
+	 * well, see get_key_id_option_name(). It is no secret and cannot be used
+	 * to decrypt anything.
+	 *
+	 * @return string The raw key ID.
+	 */
+	private function get_payload_key_id(): string {
+		return (string) hex2bin( $this->get_key_id( $this->get_key_material() ) );
+	}
+
+	/**
+	 * Return the header for a new value in the versioned payload format.
+	 *
+	 * It names the version of the format, the settings the value has been
+	 * encrypted with and the ID of the key in use. A method writes it in
+	 * front of the value and authenticates it with get_additional_data().
+	 *
+	 * @return array{version:int,flags:int,key_id:string,bytes:string}
+	 */
+	protected function create_payload_header(): array {
+		$flags  = $this->is_site_binding_requested() ? self::PAYLOAD_FLAG_SITE : 0;
+		$key_id = $this->get_payload_key_id();
+
+		return array(
+			'version' => self::PAYLOAD_VERSION,
+			'flags'   => $flags,
+			'key_id'  => $key_id,
+			'bytes'   => self::PAYLOAD_MAGIC . chr( self::PAYLOAD_VERSION ) . chr( $flags ) . $key_id,
+		);
+	}
+
+	/**
+	 * Return the header of a value in the versioned payload format - or null
+	 * if the value is not in this format.
+	 *
+	 * Nothing is reported here: the caller decides, whether the value may be
+	 * one of an older format after all. A header of another version or with
+	 * unknown flags is returned all the same, see is_payload_header_supported().
+	 *
+	 * @param string $payload The decoded value.
+	 *
+	 * @return array{version:int,flags:int,key_id:string,bytes:string}|null
+	 */
+	protected function read_payload_header( string $payload ): ?array {
+		// bail if the value does not begin with the header.
+		if ( strlen( $payload ) < self::PAYLOAD_HEADER_LENGTH || ! str_starts_with( $payload, self::PAYLOAD_MAGIC ) ) {
+			return null;
+		}
+
+		$offset = strlen( self::PAYLOAD_MAGIC );
+
+		return array(
+			'version' => ord( $payload[ $offset ] ),
+			'flags'   => ord( $payload[ $offset + 1 ] ),
+			'key_id'  => substr( $payload, $offset + 2, self::PAYLOAD_KEY_ID_LENGTH ),
+			'bytes'   => substr( $payload, 0, self::PAYLOAD_HEADER_LENGTH ),
+		);
+	}
+
+	/**
+	 * Return whether this version of the package can read a value with the
+	 * given header.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header The header of the value.
+	 *
+	 * @return bool
+	 */
+	protected function is_payload_header_supported( array $header ): bool {
+		return self::PAYLOAD_VERSION === $header['version'] && 0 === ( $header['flags'] & ~self::PAYLOAD_FLAGS_KNOWN );
+	}
+
+	/**
+	 * Report a value in a payload format, which this version of the package
+	 * cannot read: it has been written by a newer version.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header  The header of the value.
+	 * @param string                                                  $context The context of the value.
+	 *
+	 * @return void
+	 */
+	protected function report_unsupported_payload( array $header, string $context ): void {
+		$this->get_crypt_obj()->add_error(
+			'payload_version_unknown',
+			'The value has been written by a newer version of this package, in a format this version cannot read. Update the plugin, whose copy of this package is in use.',
+			array(
+				'method'  => $this->get_name(),
+				'version' => $header['version'],
+				'flags'   => $header['flags'],
+				'context' => $context,
+			)
+		);
+	}
+
+	/**
+	 * Return the additional data a value in the versioned payload format is
+	 * authenticated with.
+	 *
+	 * This is the header - with it the version of the format, its settings
+	 * and the key ID -, the data of the method in front of the encrypted
+	 * value, the ID of the site, if the value is bound to it, and the
+	 * context. None of them can be changed without the value failing to
+	 * decrypt.
+	 *
+	 * All parts but the context have a fixed length for a header, so no
+	 * part can ever be mistaken for another.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header      The header of the value.
+	 * @param string                                                  $method_data Data of the method with a fixed length, which is written after the header.
+	 * @param string                                                  $context     The context of the value.
+	 *
+	 * @return string
+	 */
+	protected function get_additional_data( array $header, string $method_data, string $context ): string {
+		$site = ( $header['flags'] & self::PAYLOAD_FLAG_SITE ) ? pack( 'J', get_current_blog_id() ) : '';
+
+		return $header['bytes'] . $method_data . $site . $context;
+	}
+
+	/**
+	 * Report a value in the versioned payload format, which could not be
+	 * decrypted, because it belongs to another key than the one in use.
+	 *
+	 * The value names its key. If that is not the key in use, this is the
+	 * reason - and not a changed value or a wrong context. Nothing is
+	 * reported, if it is the key in use: the method reports its own reason
+	 * then.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header  The header of the value.
+	 * @param string                                                  $context The context of the value.
+	 *
+	 * @return bool True if the value belongs to another key, and this has been reported.
+	 */
+	protected function report_other_key( array $header, string $context ): bool {
+		$key_id = $this->get_payload_key_id();
+
+		// bail if the value names the key in use.
+		if ( hash_equals( $key_id, $header['key_id'] ) ) {
+			return false;
+		}
+
+		// log this error.
+		$this->get_crypt_obj()->add_error(
+			'key_mismatch',
+			'The value has been encrypted with another key than the one in use. It can only be decrypted with that key: restore it from a backup.',
+			array(
+				'method'         => $this->get_name(),
+				'key_id'         => bin2hex( $header['key_id'] ),
+				'current_key_id' => bin2hex( $key_id ),
+				'context'        => $context,
+			)
+		);
+
+		return true;
 	}
 
 	/**

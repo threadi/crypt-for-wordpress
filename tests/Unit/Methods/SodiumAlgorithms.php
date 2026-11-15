@@ -59,7 +59,10 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	 * @return int
 	 */
 	private function get_algorithm_of( string $value ): int {
-		return ord( sodium_base642bin( $value, SODIUM_BASE64_VARIANT_ORIGINAL )[0] );
+		$payload = sodium_base642bin( $value, SODIUM_BASE64_VARIANT_ORIGINAL );
+
+		// in the versioned format the algorithm follows the header of 13 bytes.
+		return ord( str_starts_with( $payload, "\xF3CW" ) ? $payload[13] : $payload[0] );
 	}
 
 	/**
@@ -93,7 +96,7 @@ class SodiumAlgorithms extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Return a value in the format the method writes: [algorithm][nonce][ciphertext].
+	 * Return a value in the format version 4.2.0 writes: [algorithm][nonce][ciphertext].
 	 *
 	 * @param int    $algorithm    The id of the algorithm.
 	 * @param int    $nonce_length The length of the nonce.

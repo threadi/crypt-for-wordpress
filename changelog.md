@@ -12,6 +12,12 @@
 - Added `discard_kept_keys()` on the Crypt object: it removes the keys an uninstallation has kept, so a later installation can start over with a new key - e.g. if the kept secret cannot be read anymore after the WordPress salts have been changed. The error "secrets_api_unavailable" names such a kept key with `kept_key` in its data
 - Added the workflow "Hook documentation", which updates docs/hooks.md on every pull request changing src/. The template bin/wp-documentor-markdown.php sorts the hooks by name, so their order does not depend on the file system
 - Added tests with WordPress 6.9 and 7.2 for the key kept during an uninstallation, for the autoload of the place "database" and for the algorithms of Sodium
+- Added the versioned payload format: every value encrypted with OpenSSL or Sodium begins with a header, which names the version of its format and the ID of its key - the fingerprint already remembered in `{slug}_crypt_key_id_{method}`. The header is authenticated together with the value and its context, so a value cannot be passed off as one of an older format. See docs/PayloadFormat.md
+- Added the error "key_mismatch": a value has been encrypted with another key than the one in use, with both key IDs in its data - instead of a general error of the method
+- Added the error "payload_version_unknown": a value has been written by a newer version of this package, in a format this version cannot read
+- Added the setting `'bind_site' => true`: new values are bound to the ID of the site they are encrypted on, and are not decrypted on another site of a multisite network
+- Added the setting `'legacy_format' => true`: new values are written in the format of version 4.2.0, e.g. as long as other plugins ship an older copy of this package. Together with `'bind_site'` nothing is encrypted, and "bind_site_not_possible" is reported
+- Added test vectors of the versioned payload format
 
 ### Changed
 
@@ -21,6 +27,7 @@
 - The place "database" saves the key in an option, which is not loaded with every request - so it does not end up in a persistent object cache. A key saved by an older version is changed accordingly, as soon as it is loaded (WordPress 6.4 or newer)
 - Sodium encrypts new values with XChaCha20-Poly1305, as WordPress does for its secrets - not anymore with the fastest algorithm of the server. Values written with AEGIS-256 or AES-256-GCM could not be decrypted on a server without it. Values of every algorithm stay readable. `'algorithm' => 'auto'` restores the former behavior
 - Every hook name starts with the variable `$slug` now, so wp-documentor can read it. The names of the hooks are unchanged
+- New values are written in the versioned payload format. Versions before 4.3.0 cannot read it - see `'legacy_format'`. Values of every older format stay readable and keep their format until they are encrypted again
 
 ### Fixed
 

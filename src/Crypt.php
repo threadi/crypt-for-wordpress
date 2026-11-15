@@ -91,7 +91,7 @@ class Crypt {
 	/**
 	 * The method configurations.
 	 *
-	 * @var array<string,array<string,mixed>|string>
+	 * @var array<string,array<string,mixed>|string|bool>
 	 */
 	private array $configuration = array();
 
@@ -855,7 +855,7 @@ class Crypt {
 	/**
 	 * Return the configuration.
 	 *
-	 * @return array<string,array<string,mixed>|string>
+	 * @return array<string,array<string,mixed>|string|bool>
 	 */
 	public function get_config(): array {
 		return $this->configuration;
@@ -864,7 +864,7 @@ class Crypt {
 	/**
 	 * Set the custom configuration for this object.
 	 *
-	 * @param array<string,array<string,mixed>|string> $configurations List of configurations.
+	 * @param array<string,array<string,mixed>|string|bool> $configurations List of configurations.
 	 * @return void
 	 */
 	public function set_config( array $configurations ): void {
@@ -1152,7 +1152,7 @@ class Crypt {
 	/**
 	 * Return the used settings for debug purposes.
 	 *
-	 * @return array<string,array<string,mixed>|string>
+	 * @return array<string,array<string,mixed>|string|bool>
 	 */
 	public function debug(): array {
 		// get the place.

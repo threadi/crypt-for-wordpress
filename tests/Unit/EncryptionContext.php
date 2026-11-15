@@ -263,7 +263,10 @@ class EncryptionContext extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_value_with_context_cannot_be_rewrapped_in_the_old_format(): void {
-		list( , $method ) = $this->get_initialized_methods()['openssl-cbc'];
+		list( $crypt_obj, $method ) = $this->get_initialized_methods()['openssl-cbc'];
+
+		// the format of version 4.2.0. The versioned format: see VersionedPayload.
+		$crypt_obj->set_config( array( 'legacy_format' => true ) );
 
 		// with these lengths the IV and the ciphertext stay aligned to the cipher blocks.
 		foreach ( array( 'secret', str_repeat( 'x', 22 ) ) as $context ) {
