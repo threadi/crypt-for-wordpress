@@ -34,6 +34,11 @@ jobs:
         # latest: the current release.
         # nightly: the next release - with the Secrets API since 7.2.
         wp-version: [ '6.9', 'latest', 'nightly' ]
+        exclude:
+          # PHP 8.6 deprecates spl_object_hash(), which WordPress before 7.1 calls for
+          # every hook - our phpunit.xml.dist turns each of these deprecations into an error.
+          - php-version: '8.6'
+            wp-version: '6.9'
     services:
       database:
         image: mysql:latest
