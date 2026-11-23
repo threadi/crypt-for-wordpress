@@ -71,7 +71,11 @@ jobs:
 
   without-sodium:
     name: PHP ${{ matrix.php-version }}, WordPress ${{ matrix.wp-version }}, without ext-sodium
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+    # The PHP of setup-php has sodium compiled in statically, so ":sodium" can not
+    # disable it there. The official PHP images build sodium as a shared module and
+    # only enable it by an ini file - removing that file disables the extension.
+    container: php:${{ matrix.php-version }}-cli
     strategy:
       fail-fast: false
       matrix:
@@ -80,25 +84,27 @@ jobs:
         # 6.9: without the Secrets API of WordPress, nightly: with it - which uses sodium_compat as well then.
         wp-version: [ '6.9', 'nightly' ]
     services:
+      # Reachable from the job container by the host name "database".
       database:
         image: mysql:latest
         env:
           MYSQL_DATABASE: wordpress_tests
           MYSQL_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
     steps:
+      - name: Install system packages
+        run: apt-get update && apt-get install -y --no-install-recommends git unzip subversion
+
       - name: Check out source code
         uses: actions/checkout@v7
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php-version }}
-          tools: phpunit-polyfills:1.1
-          # ":sodium" disables the extension: WordPress loads its sodium_compat instead.
-          extensions: mbstring, xml, zip, intl, pdo, mysql, :sodium
-          coverage: none
+        run: |
+          docker-php-ext-install mysqli
+          # Disable sodium: WordPress loads its sodium_compat instead.
+          rm /usr/local/etc/php/conf.d/docker-php-ext-sodium.ini
+          curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+          php -v
+          php -m
 
       - name: Check that the extension sodium is missing
         run: php -r 'if ( extension_loaded( "sodium" ) || function_exists( "sodium_crypto_box" ) ) { echo "The extension sodium is loaded.\n"; exit( 1 ); }'
@@ -106,11 +112,8 @@ jobs:
       - name: Install dependencies
         run: composer install
 
-      - name: Install SVN
-        run: sudo apt-get update && sudo apt-get install -y subversion
-
       - name: Setup tests
-        run: bash bin/install-wp-tests.sh wordpress_tests root root 127.0.0.1 ${{ matrix.wp-version }} true
+        run: bash bin/install-wp-tests.sh wordpress_tests root root database ${{ matrix.wp-version }} true
 
       - name: Run tests (single site)
         run: composer test
