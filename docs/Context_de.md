@@ -43,6 +43,12 @@ if ( '' === $plain ) {
 
 Das erste `decrypt()` meldet für jeden noch nicht migrierten Wert einen Fehler. Entferne den Rückfall, sobald alle Werte migriert sind: Solange er existiert, wird ein Wert ohne Kontext weiterhin überall akzeptiert.
 
+## Einen Wert an seine Site binden
+
+In einem Multisite-Netzwerk lässt sich ein Wert zusätzlich an die Site binden, auf der er verschlüsselt wird, mit `'bind_site' => true` in der Konfiguration. Auf einer anderen Site wird er dann nicht entschlüsselt, auch nicht mit demselben Kontext. Siehe [Das Format verschlüsselter Werte](PayloadFormat_de.md#einen-wert-an-seine-site-binden).
+
+Neben dem Kontext ist jeder Wert an die Version seines Formats und an seinen Schlüssel gebunden: Sie werden zusammen mit ihm authentifiziert, siehe [Das Format verschlüsselter Werte](PayloadFormat_de.md).
+
 ## Fehler
 
 Ein Fehler von `encrypt()` oder `decrypt()` zum Wert nennt in seinen Daten den Kontext. So erkennst du, welcher deiner Werte betroffen ist:

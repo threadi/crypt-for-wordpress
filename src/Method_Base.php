@@ -10,6 +10,8 @@ namespace CryptForWordPress;
 // prevent direct access.
 defined( 'ABSPATH' ) || exit;
 
+use WP_Error;
+
 /**
  * Object to handle crypt methods as base-object.
  */
@@ -20,6 +22,43 @@ class Method_Base {
 	 * @var string
 	 */
 	protected string $name = '';
+
+	/**
+	 * The first bytes of every value in the versioned payload format.
+	 *
+	 * None of the formats of earlier versions can begin with them: the
+	 * values of Sodium begin with the number of their algorithm (1 to 4),
+	 * the ones of OpenSSL with a base64 character. Only the very first
+	 * format of OpenSSL for ciphers without AEAD begins with random bytes,
+	 * see OpenSsl::decrypt_with_context().
+	 */
+	private const PAYLOAD_MAGIC = "\xF3CW";
+
+	/**
+	 * The version of the payload format this package writes.
+	 */
+	private const PAYLOAD_VERSION = 1;
+
+	/**
+	 * Flag in the payload header: the value is bound to the site it has
+	 * been encrypted on.
+	 */
+	private const PAYLOAD_FLAG_SITE = 1;
+
+	/**
+	 * Every flag this version of the payload format knows.
+	 */
+	private const PAYLOAD_FLAGS_KNOWN = self::PAYLOAD_FLAG_SITE;
+
+	/**
+	 * Length of the key ID in the payload header, in bytes.
+	 */
+	private const PAYLOAD_KEY_ID_LENGTH = 8;
+
+	/**
+	 * Length of the payload header, in bytes: magic, version, flags, key ID.
+	 */
+	private const PAYLOAD_HEADER_LENGTH = 13;
 
 	/**
 	 * The hash for encryption.
@@ -83,6 +122,14 @@ class Method_Base {
 	 * @var string
 	 */
 	private string $derived_key = '';
+
+	/**
+	 * Where get_key_kept_for_uninstall() has found the key: "secret",
+	 * "option" or an empty string.
+	 *
+	 * @var string
+	 */
+	private string $kept_key_source = '';
 
 	/**
 	 * Initialize this crypt method.
@@ -293,7 +340,8 @@ class Method_Base {
 	 * @return string
 	 */
 	public function get_constant(): string {
-		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-HASH';
+		$slug     = $this->get_crypt_obj()->get_slug();
+		$constant = strtoupper( $slug ) . '-HASH';
 
 		/**
 		 * Filter the name of the constant.
@@ -301,7 +349,7 @@ class Method_Base {
 		 * @since 1.1.2 Available since 1.1.2.
 		 * @param string $constant The name of the constant.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		return apply_filters( $slug . '_crypt_constant', $constant );
 	}
 
 	/**
@@ -832,6 +880,12 @@ class Method_Base {
 	 * @return bool
 	 */
 	private function is_stored_key_unavailable(): bool {
+		// the key an uninstallation has kept as secret cannot be read: it is
+		// the key all values have been encrypted with.
+		if ( $this->is_kept_key_unavailable() ) {
+			return true;
+		}
+
 		// ask the Crypt object, if it is able to.
 		if ( method_exists( $this->get_crypt_obj(), 'is_stored_key_unavailable' ) ) { // @phpstan-ignore function.alreadyNarrowedType
 			return $this->get_crypt_obj()->is_stored_key_unavailable( $this->get_constant() );
@@ -849,6 +903,24 @@ class Method_Base {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Return whether the Secrets API holds a key of this method, which an
+	 * uninstallation has kept, but cannot hand it over right now.
+	 *
+	 * @return bool
+	 */
+	private function is_kept_key_unavailable(): bool {
+		// bail if this method keeps no key during an uninstallation.
+		if ( '' === $this->get_uninstall_option_name() ) {
+			return false;
+		}
+
+		// get the place of the Secrets API.
+		$place_obj = $this->get_secrets_api_place();
+
+		return $place_obj instanceof Places\SecretsApi && $place_obj->get_kept_key( $this->get_name() ) instanceof WP_Error;
 	}
 
 	/**
@@ -1053,8 +1125,249 @@ class Method_Base {
 	}
 
 	/**
+	 * Return a setting of the Crypt object, which is not one of a method.
+	 *
+	 * @param string $name The name of the setting.
+	 *
+	 * @return mixed The value, or null if it is not set.
+	 */
+	private function get_global_setting( string $name ): mixed {
+		// bail if the Crypt class cannot hand out its settings (an older copy of this package).
+		if ( ! method_exists( $this->get_crypt_obj(), 'get_config' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return null;
+		}
+
+		$configuration = $this->get_crypt_obj()->get_config();
+
+		return $configuration[ $name ] ?? null;
+	}
+
+	/**
+	 * Return whether new values are written in the versioned payload format.
+	 *
+	 * This is the default since version 4.3.0. Older copies of this package
+	 * cannot read it. With 'legacy_format' => true, new values are written
+	 * in the format of version 4.2.0 instead - e.g. as long as other plugins
+	 * of the website ship an older copy of this package, which may be the
+	 * one in use, see docs/MultiplePlugins.md. Values of both formats are
+	 * read in any case.
+	 *
+	 * 'bind_site' needs the versioned format: with both settings nothing is
+	 * encrypted, see is_payload_format_configured().
+	 *
+	 * @return bool
+	 */
+	protected function uses_versioned_payload(): bool {
+		return ! (bool) $this->get_global_setting( 'legacy_format' );
+	}
+
+	/**
+	 * Return whether the settings for the payload format can be met, and
+	 * report it if not.
+	 *
+	 * A value is never encrypted without the binding to its site, if this
+	 * has been requested: the format of version 4.2.0, requested with
+	 * 'legacy_format', cannot hold it.
+	 *
+	 * @param string $context The context of the value.
+	 *
+	 * @return bool
+	 */
+	protected function is_payload_format_configured( string $context ): bool {
+		// bail if the settings do not contradict each other.
+		if ( $this->uses_versioned_payload() || ! $this->is_site_binding_requested() ) {
+			return true;
+		}
+
+		// log this error.
+		$this->get_crypt_obj()->add_error(
+			'bind_site_not_possible',
+			'A value cannot be bound to its site in the format of version 4.2.0. Remove one of the settings "bind_site" and "legacy_format".',
+			array(
+				'method'  => $this->get_name(),
+				'context' => $context,
+			)
+		);
+
+		return false;
+	}
+
+	/**
+	 * Return whether new values should be bound to the site they are
+	 * encrypted on.
+	 *
+	 * @return bool
+	 */
+	private function is_site_binding_requested(): bool {
+		return (bool) $this->get_global_setting( 'bind_site' );
+	}
+
+	/**
+	 * Return the ID of the key in use, as it is written into a payload.
+	 *
+	 * It is the fingerprint, which is remembered for this installation as
+	 * well, see get_key_id_option_name(). It is no secret and cannot be used
+	 * to decrypt anything.
+	 *
+	 * @return string The raw key ID.
+	 */
+	private function get_payload_key_id(): string {
+		return (string) hex2bin( $this->get_key_id( $this->get_key_material() ) );
+	}
+
+	/**
+	 * Return the header for a new value in the versioned payload format.
+	 *
+	 * It names the version of the format, the settings the value has been
+	 * encrypted with and the ID of the key in use. A method writes it in
+	 * front of the value and authenticates it with get_additional_data().
+	 *
+	 * @return array{version:int,flags:int,key_id:string,bytes:string}
+	 */
+	protected function create_payload_header(): array {
+		$flags  = $this->is_site_binding_requested() ? self::PAYLOAD_FLAG_SITE : 0;
+		$key_id = $this->get_payload_key_id();
+
+		return array(
+			'version' => self::PAYLOAD_VERSION,
+			'flags'   => $flags,
+			'key_id'  => $key_id,
+			'bytes'   => self::PAYLOAD_MAGIC . chr( self::PAYLOAD_VERSION ) . chr( $flags ) . $key_id,
+		);
+	}
+
+	/**
+	 * Return the header of a value in the versioned payload format - or null
+	 * if the value is not in this format.
+	 *
+	 * Nothing is reported here: the caller decides, whether the value may be
+	 * one of an older format after all. A header of another version or with
+	 * unknown flags is returned all the same, see is_payload_header_supported().
+	 *
+	 * @param string $payload The decoded value.
+	 *
+	 * @return array{version:int,flags:int,key_id:string,bytes:string}|null
+	 */
+	protected function read_payload_header( string $payload ): ?array {
+		// bail if the value does not begin with the header.
+		if ( strlen( $payload ) < self::PAYLOAD_HEADER_LENGTH || ! str_starts_with( $payload, self::PAYLOAD_MAGIC ) ) {
+			return null;
+		}
+
+		$offset = strlen( self::PAYLOAD_MAGIC );
+
+		return array(
+			'version' => ord( $payload[ $offset ] ),
+			'flags'   => ord( $payload[ $offset + 1 ] ),
+			'key_id'  => substr( $payload, $offset + 2, self::PAYLOAD_KEY_ID_LENGTH ),
+			'bytes'   => substr( $payload, 0, self::PAYLOAD_HEADER_LENGTH ),
+		);
+	}
+
+	/**
+	 * Return whether this version of the package can read a value with the
+	 * given header.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header The header of the value.
+	 *
+	 * @return bool
+	 */
+	protected function is_payload_header_supported( array $header ): bool {
+		return self::PAYLOAD_VERSION === $header['version'] && 0 === ( $header['flags'] & ~self::PAYLOAD_FLAGS_KNOWN );
+	}
+
+	/**
+	 * Report a value in a payload format, which this version of the package
+	 * cannot read: it has been written by a newer version.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header  The header of the value.
+	 * @param string                                                  $context The context of the value.
+	 *
+	 * @return void
+	 */
+	protected function report_unsupported_payload( array $header, string $context ): void {
+		$this->get_crypt_obj()->add_error(
+			'payload_version_unknown',
+			'The value has been written by a newer version of this package, in a format this version cannot read. Update the plugin, whose copy of this package is in use.',
+			array(
+				'method'  => $this->get_name(),
+				'version' => $header['version'],
+				'flags'   => $header['flags'],
+				'context' => $context,
+			)
+		);
+	}
+
+	/**
+	 * Return the additional data a value in the versioned payload format is
+	 * authenticated with.
+	 *
+	 * This is the header - with it the version of the format, its settings
+	 * and the key ID -, the data of the method in front of the encrypted
+	 * value, the ID of the site, if the value is bound to it, and the
+	 * context. None of them can be changed without the value failing to
+	 * decrypt.
+	 *
+	 * All parts but the context have a fixed length for a header, so no
+	 * part can ever be mistaken for another.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header      The header of the value.
+	 * @param string                                                  $method_data Data of the method with a fixed length, which is written after the header.
+	 * @param string                                                  $context     The context of the value.
+	 *
+	 * @return string
+	 */
+	protected function get_additional_data( array $header, string $method_data, string $context ): string {
+		$site = ( $header['flags'] & self::PAYLOAD_FLAG_SITE ) ? pack( 'J', get_current_blog_id() ) : '';
+
+		return $header['bytes'] . $method_data . $site . $context;
+	}
+
+	/**
+	 * Report a value in the versioned payload format, which could not be
+	 * decrypted, because it belongs to another key than the one in use.
+	 *
+	 * The value names its key. If that is not the key in use, this is the
+	 * reason - and not a changed value or a wrong context. Nothing is
+	 * reported, if it is the key in use: the method reports its own reason
+	 * then.
+	 *
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header  The header of the value.
+	 * @param string                                                  $context The context of the value.
+	 *
+	 * @return bool True if the value belongs to another key, and this has been reported.
+	 */
+	protected function report_other_key( array $header, string $context ): bool {
+		$key_id = $this->get_payload_key_id();
+
+		// bail if the value names the key in use.
+		if ( hash_equals( $key_id, $header['key_id'] ) ) {
+			return false;
+		}
+
+		// log this error.
+		$this->get_crypt_obj()->add_error(
+			'key_mismatch',
+			'The value has been encrypted with another key than the one in use. It can only be decrypted with that key: restore it from a backup.',
+			array(
+				'method'         => $this->get_name(),
+				'key_id'         => bin2hex( $header['key_id'] ),
+				'current_key_id' => bin2hex( $key_id ),
+				'context'        => $context,
+			)
+		);
+
+		return true;
+	}
+
+	/**
 	 * Put the key of this method aside, before the places are cleaned up
 	 * during an uninstallation. Does nothing if it has been done already.
+	 *
+	 * The key is kept as secret with the Secrets API of WordPress, if it can
+	 * take it: it is encrypted there. Otherwise, it is kept in an option in
+	 * the database, which is not loaded with every request. A later
+	 * installation reads it from there, see get_key_kept_for_uninstall().
 	 *
 	 * @internal Used for internal tasks.
 	 *
@@ -1085,9 +1398,164 @@ class Method_Base {
 			return;
 		}
 
-		// save the key in the database, exactly as it is - whether it is the
-		// known key of this installation is decided when it is used again.
-		update_option( $option_name, $stored_key );
+		// keep the key as secret, exactly as it is - whether it is the known
+		// key of this installation is decided when it is used again.
+		$place_obj = $this->get_secrets_api_place();
+		if ( $place_obj instanceof Places\SecretsApi && $place_obj->keep_key( $this->get_name(), $stored_key ) ) {
+			// an older uninstallation may have left this key in plain text in the database.
+			if ( get_option( $option_name, '' ) === $stored_key ) {
+				delete_option( $option_name );
+			}
+
+			// do nothing more.
+			return;
+		}
+
+		// save the key in the database instead - not loaded with every request.
+		update_option( $option_name, $stored_key, false );
+
+		// update_option() keeps the autoload, if the value has not changed.
+		Helper::disable_option_autoload( $option_name );
+	}
+
+	/**
+	 * Return the key an uninstallation has kept, as it is stored - or an
+	 * empty string.
+	 *
+	 * The secret is asked first, then the option in the database: an
+	 * uninstallation keeps the key in the option only, if the Secrets API
+	 * could not take it - or if it has been done by a version before 4.3.0.
+	 *
+	 * If the secret exists, but cannot be read, it is reported, and nothing
+	 * is returned. The key is unavailable then, so no new key is generated,
+	 * see is_stored_key_unavailable().
+	 *
+	 * @return string
+	 */
+	protected function get_key_kept_for_uninstall(): string {
+		$this->kept_key_source = '';
+
+		// bail if this method keeps no key during an uninstallation.
+		$option_name = $this->get_uninstall_option_name();
+		if ( '' === $option_name ) {
+			return '';
+		}
+
+		// get the key kept as secret.
+		$place_obj = $this->get_secrets_api_place();
+		if ( $place_obj instanceof Places\SecretsApi ) {
+			$kept_key = $place_obj->get_kept_key( $this->get_name() );
+
+			// bail if it cannot be read: it is the key all values have been encrypted with.
+			if ( $kept_key instanceof WP_Error ) {
+				// log this error.
+				$this->get_crypt_obj()->add_error(
+					'secrets_api_unavailable',
+					'The key for encryption, which has been kept during an uninstallation, could not be read from the Secrets API of WordPress. No new key is generated. Restore WP_SECRETS_KEY or the WordPress salts used before - or start over with a new key with discard_kept_keys(), which leaves the values encrypted so far unreadable.',
+					array(
+						'secret'   => $place_obj->get_kept_key_name( $this->get_name() ),
+						'reason'   => $kept_key->get_error_code(),
+						'kept_key' => true,
+					)
+				);
+
+				// do nothing more.
+				return '';
+			}
+
+			// use it, if there is one.
+			if ( '' !== $kept_key ) {
+				$this->kept_key_source = 'secret';
+				return $kept_key;
+			}
+		}
+
+		// get the key kept in the database.
+		$option_value = get_option( $option_name, '' );
+		if ( ! is_string( $option_value ) || '' === $option_value ) {
+			return '';
+		}
+
+		$this->kept_key_source = 'option';
+		return $option_value;
+	}
+
+	/**
+	 * Remove the key an uninstallation has kept, after it has been saved in
+	 * its place - from where get_key_kept_for_uninstall() has found it.
+	 *
+	 * @return void
+	 */
+	protected function forget_key_kept_for_uninstall(): void {
+		// remove the secret.
+		if ( 'secret' === $this->kept_key_source ) {
+			$place_obj = $this->get_secrets_api_place();
+			if ( $place_obj instanceof Places\SecretsApi ) {
+				$place_obj->forget_kept_key( $this->get_name() );
+			}
+		}
+
+		// remove the option.
+		if ( 'option' === $this->kept_key_source && '' !== $this->get_uninstall_option_name() ) {
+			delete_option( $this->get_uninstall_option_name() );
+		}
+
+		$this->kept_key_source = '';
+	}
+
+	/**
+	 * Remove the key an uninstallation has kept for this method - as secret
+	 * and in the database -, whether it can be read or not.
+	 *
+	 * @internal Used for internal tasks, see Crypt::discard_kept_keys().
+	 *
+	 * @return void
+	 */
+	public function discard_kept_key(): void {
+		// bail if this method keeps no key during an uninstallation.
+		$option_name = $this->get_uninstall_option_name();
+		if ( '' === $option_name ) {
+			return;
+		}
+
+		// remove the secret.
+		$place_obj = $this->get_secrets_api_place();
+		if ( $place_obj instanceof Places\SecretsApi ) {
+			$place_obj->forget_kept_key( $this->get_name() );
+		}
+
+		// remove the option.
+		delete_option( $option_name );
+
+		$this->kept_key_source = '';
+	}
+
+	/**
+	 * Return the place "secrets_api", if it can keep a key during an
+	 * uninstallation - or null.
+	 *
+	 * It is used whatever the order of the places is, and also if a
+	 * configured "force_place" hides it. Only 'block_secrets_api' prevents
+	 * its usage.
+	 *
+	 * @return Places\SecretsApi|null
+	 */
+	private function get_secrets_api_place(): ?Places\SecretsApi {
+		// get the place: an older Crypt class can only hand out the places a
+		// configured "force_place" does not hide.
+		$crypt_obj = $this->get_crypt_obj();
+		$places    = method_exists( $crypt_obj, 'get_place_by_name' ) ? array( $crypt_obj->get_place_by_name( 'secrets_api' ) ) : $crypt_obj->get_places_as_objects(); // @phpstan-ignore function.alreadyNarrowedType
+
+		foreach ( $places as $place_obj ) {
+			// bail if it is not the place of the Secrets API, or of an older copy of this package, which cannot keep a key.
+			if ( ! $place_obj instanceof Places\SecretsApi || ! method_exists( $place_obj, 'keep_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+				continue;
+			}
+
+			return $place_obj;
+		}
+
+		return null;
 	}
 
 	/**

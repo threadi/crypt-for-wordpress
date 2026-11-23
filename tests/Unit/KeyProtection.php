@@ -97,6 +97,28 @@ PHP;
 	}
 
 	/**
+	 * Return IV, tag and ciphertext of a value OpenSSL has encrypted with an
+	 * AEAD cipher - in the versioned format or in the one of version 4.2.0.
+	 *
+	 * @param string $encrypted The encrypted value.
+	 *
+	 * @return array{0:string,1:string,2:string}
+	 */
+	private function get_aead_parts( string $encrypted ): array {
+		$payload = (string) base64_decode( $encrypted, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+
+		// the versioned format: [header of 13 bytes][IV of 12 bytes][tag of 16 bytes][ciphertext].
+		if ( str_starts_with( $payload, "\xF3CW" ) ) {
+			return array( substr( $payload, 13, 12 ), substr( $payload, 25, 16 ), substr( $payload, 41 ) );
+		}
+
+		// the format of version 4.2.0.
+		$parts = explode( ':', $payload );
+
+		return array( (string) base64_decode( $parts[0], true ), (string) base64_decode( $parts[1], true ), (string) base64_decode( $parts[2], true ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+	}
+
+	/**
 	 * Return the constant the given method reads its key from.
 	 *
 	 * @param \CryptForWordPress\Crypt $crypt_obj The crypt object.
@@ -133,6 +155,38 @@ PHP;
 	 */
 	private function get_key_id_option( \CryptForWordPress\Crypt $crypt_obj, string $method ): string {
 		return $crypt_obj->get_slug() . '_crypt_key_id_' . $method;
+	}
+
+	/**
+	 * Return the key an uninstallation has kept for the given method - or
+	 * false, if it kept none.
+	 *
+	 * With the Secrets API of WordPress the key is kept as secret, and never
+	 * in plain text in the database. Without it, it is kept in an option,
+	 * which is not loaded with every request.
+	 *
+	 * @param \CryptForWordPress\Crypt $crypt_obj The crypt object.
+	 * @param string                   $method The method name.
+	 *
+	 * @return string|false
+	 */
+	private function get_kept_key( \CryptForWordPress\Crypt $crypt_obj, string $method ): string|false {
+		$option_name = $crypt_obj->get_slug() . ( 'sodium' === $method ? '_sodium_hash' : '_hash' );
+
+		// with the Secrets API: as secret only.
+		if ( \CryptForWordPress\Places\SecretsApi::is_api_available() && wp_secrets_provider_is_writable() ) {
+			$this->assertFalse( get_option( $option_name ), 'The key has been kept in plain text in the database.' );
+
+			$kept_key = ( new \CryptForWordPress\Places\SecretsApi( $crypt_obj ) )->get_kept_key( $method );
+			$this->assertIsString( $kept_key );
+
+			return '' === $kept_key ? false : $kept_key;
+		}
+
+		// without it: in an option, which is not loaded with every request.
+		$this->assertArrayNotHasKey( $option_name, wp_load_alloptions() );
+
+		return get_option( $option_name );
 	}
 
 	/**
@@ -439,8 +493,8 @@ PHP;
 			// a real key has been saved, and the value is not readable without it.
 			$this->assertMatchesRegularExpression( '/^[0-9a-f]{64}$/', (string) get_option( $crypt_obj->get_slug() . '-hash' ) );
 
-			$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
-			$this->assertFalse( openssl_decrypt( (string) base64_decode( $parts[2], true ), 'aes-256-gcm', '', OPENSSL_RAW_DATA, (string) base64_decode( $parts[0], true ), (string) base64_decode( $parts[1], true ) ) );
+			list( $iv, $tag, $ciphertext ) = $this->get_aead_parts( $encrypted );
+			$this->assertFalse( openssl_decrypt( $ciphertext, 'aes-256-gcm', '', OPENSSL_RAW_DATA, $iv, $tag ) );
 		}
 	}
 
@@ -770,8 +824,8 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertSame( $key_of_openssl, get_option( $crypt_obj->get_slug() . '_hash' ) );
-		$this->assertSame( $key_of_sodium, get_option( $crypt_obj->get_slug() . '_sodium_hash' ) );
+		$this->assertSame( $key_of_openssl, $this->get_kept_key( $crypt_obj, 'openssl' ) );
+		$this->assertSame( $key_of_sodium, $this->get_kept_key( $crypt_obj, 'sodium' ) );
 	}
 
 	/**
@@ -827,7 +881,7 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertFalse( get_option( $crypt_obj->get_slug() . ( 'sodium' === $method ? '_sodium_hash' : '_hash' ) ) );
+		$this->assertFalse( $this->get_kept_key( $crypt_obj, $method ) );
 	}
 
 	/**
@@ -845,7 +899,7 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertFalse( get_option( $crypt_obj->get_slug() . '_sodium_hash' ) );
+		$this->assertFalse( $this->get_kept_key( $crypt_obj, 'sodium' ) );
 	}
 
 	/**
@@ -918,9 +972,9 @@ PHP;
 			$this->assertNotContains( 'openssl_unprotected_value', (array) $crypt_obj->get_errors()?->get_error_codes(), $cipher );
 
 			// it is not readable without the key.
-			$parts = explode( ':', (string) base64_decode( $encrypted, true ) );
 			if ( 'AES-256-GCM' === $cipher ) {
-				$this->assertFalse( openssl_decrypt( (string) base64_decode( $parts[2], true ), 'aes-256-gcm', '', OPENSSL_RAW_DATA, (string) base64_decode( $parts[0], true ), (string) base64_decode( $parts[1], true ) ) );
+				list( $iv, $tag, $ciphertext ) = $this->get_aead_parts( $encrypted );
+				$this->assertFalse( openssl_decrypt( $ciphertext, 'aes-256-gcm', '', OPENSSL_RAW_DATA, $iv, $tag ) );
 			}
 
 			// and another self-chosen key does not read it.
@@ -1071,7 +1125,7 @@ PHP;
 		$crypt_obj->uninstall();
 
 		$this->assertFalse( get_option( $crypt_obj->get_slug() . '-hash' ) );
-		$this->assertSame( $stored_key, get_option( $crypt_obj->get_slug() . ( 'sodium' === $method ? '_sodium_hash' : '_hash' ) ) );
+		$this->assertSame( $stored_key, $this->get_kept_key( $crypt_obj, $method ) );
 	}
 
 	/**
@@ -1118,7 +1172,7 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertSame( $stored_key, get_option( $crypt_obj->get_slug() . ( 'sodium' === $method ? '_sodium_hash' : '_hash' ) ) );
+		$this->assertSame( $stored_key, $this->get_kept_key( $crypt_obj, $method ) );
 		$this->assertSame( '0123456789abcdef', get_option( $this->get_key_id_option( $crypt_obj, $method ) ) );
 	}
 
@@ -1141,7 +1195,7 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertSame( $stored_key, get_option( $crypt_obj->get_slug() . ( 'sodium' === $method ? '_sodium_hash' : '_hash' ) ) );
+		$this->assertSame( $stored_key, $this->get_kept_key( $crypt_obj, $method ) );
 	}
 
 	/**
@@ -1162,8 +1216,8 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertSame( $stored_key, get_option( $crypt_obj->get_slug() . '_sodium_hash' ) );
-		$this->assertFalse( get_option( $crypt_obj->get_slug() . '_hash' ) );
+		$this->assertSame( $stored_key, $this->get_kept_key( $crypt_obj, 'sodium' ) );
+		$this->assertFalse( $this->get_kept_key( $crypt_obj, 'openssl' ) );
 	}
 
 	/**
@@ -1280,7 +1334,7 @@ PHP;
 
 		$crypt_obj->uninstall();
 
-		$this->assertFalse( get_option( $crypt_obj->get_slug() . ( 'sodium' === $method ? '_sodium_hash' : '_hash' ) ) );
+		$this->assertFalse( $this->get_kept_key( $crypt_obj, $method ) );
 
 		// a later installation works with the derived key as before.
 		$second = new \CryptForWordPress\Crypt( self::get_plugin_path() );
@@ -1413,7 +1467,7 @@ PHP;
 		$uninstaller->set_config( array( 'force_place' => 'database' ) );
 		$uninstaller->uninstall();
 
-		$this->assertSame( $stored_key, get_option( $crypt_obj->get_slug() . '_hash' ) );
+		$this->assertSame( $stored_key, $this->get_kept_key( $crypt_obj, 'openssl' ) );
 		$this->assertNotEmpty( get_option( $this->get_key_id_option( $crypt_obj, 'openssl' ) ) );
 	}
 

@@ -18,6 +18,16 @@ use SodiumException;
 
 /**
  * Object to handle crypt tasks with Sodium.
+ *
+ * Configuration:
+ * - 'sodium' => array( 'algorithm' => 'xchacha20poly1305' ), // the default. Or: 'aegis256', 'aes256gcm', 'chacha20poly1305', or 'auto' for the fastest one of the server.
+ *
+ * Every value names the algorithm it has been encrypted with, so values of
+ * every algorithm stay readable - wherever the server supports it.
+ *
+ * New values are written in the versioned payload format, see
+ * Method_Base::create_payload_header(): [header][algorithm][nonce][ciphertext].
+ * Values of version 4.2.0 and older have no header.
  */
 class Sodium extends Method_Base {
 	/**
@@ -28,11 +38,15 @@ class Sodium extends Method_Base {
 	protected string $name = 'sodium';
 
 	/**
-	 * Coding-ID to use.
+	 * Coding-ID to use: SODIUM_BASE64_VARIANT_ORIGINAL.
+	 *
+	 * It is given as its value: the constant only exists with the extension
+	 * or sodium_compat. Without both, this object can still be created -
+	 * is_usable() tells then, that it cannot be used.
 	 *
 	 * @var int
 	 */
-	private int $coding_id = SODIUM_BASE64_VARIANT_ORIGINAL;
+	private int $coding_id = 1;
 
 	/**
 	 * The method configurations.
@@ -41,6 +55,7 @@ class Sodium extends Method_Base {
 	 */
 	protected array $configuration = array(
 		'hash_type' => 'sodium_crypto_aead_xchacha20poly1305_ietf_keygen',
+		'algorithm' => 'xchacha20poly1305',
 	);
 
 	/**
@@ -68,6 +83,25 @@ class Sodium extends Method_Base {
 	);
 
 	/**
+	 * The algorithms, which can be configured with 'algorithm', by name.
+	 *
+	 * @var array<string,int>
+	 */
+	private const ALGORITHM_NAMES = array(
+		'aegis256'          => self::ALGO_AEGIS256,
+		'aes256gcm'         => self::ALGO_AES256GCM,
+		'xchacha20poly1305' => self::ALGO_XCHACHA20POLY1305,
+		'chacha20poly1305'  => self::ALGO_CHACHA20POLY1305,
+	);
+
+	/**
+	 * Whether a configured algorithm, which cannot be used, has been reported.
+	 *
+	 * @var bool
+	 */
+	private bool $algorithm_reported = false;
+
+	/**
 	 * Initialize the object.
 	 *
 	 * @param Crypt $crypt_obj The crypt object.
@@ -80,8 +114,9 @@ class Sodium extends Method_Base {
 	 * Initiate this method.
 	 *
 	 * Looks for the key in this order: the constant (set by the place or by
-	 * WordPress itself), the option an uninstallation left behind, a key the
-	 * place derives itself, a place which is not the active one anymore.
+	 * WordPress itself), a key the place derives itself, the key an
+	 * uninstallation kept (as secret or option), a place which is not the
+	 * active one anymore.
 	 * Only if none of them has a key, a new one is generated - and this is
 	 * reported, if this installation had a key before.
 	 *
@@ -110,25 +145,23 @@ class Sodium extends Method_Base {
 
 				// a derived key is recreated on every request: it must not be
 				// written into a place. It is the key of this place, so it also
-				// wins over a key an uninstallation may have left in the database
+				// wins over a key an uninstallation may have kept
 				// - which this place could never take over.
 				$this->confirm_key();
 				return;
 			}
 
-			// get hash from the old db entry.
-			$option_name = $this->get_crypt_obj()->get_slug() . '_sodium_hash';
-			$option_hash = get_option( $option_name, '' );
-			$this->set_hash( sodium_base642bin( is_string( $option_hash ) ? $option_hash : '', $this->get_coding_id() ) );
+			// get the key an uninstallation has kept.
+			$this->set_hash( sodium_base642bin( $this->get_key_kept_for_uninstall(), $this->get_coding_id() ) );
 
 			// move it into its place.
 			if ( ! empty( $this->get_hash() ) ) {
 				$this->confirm_key();
 
-				// delete the old option field only if the place really holds the
-				// key now - otherwise the option stays the only copy of it.
+				// remove the kept key only if the place really holds it now -
+				// otherwise it stays the only copy of it.
 				if ( $this->persist_key() ) {
-					delete_option( $option_name );
+					$this->forget_key_kept_for_uninstall();
 				}
 
 				// run the constant for this process.
@@ -205,7 +238,8 @@ class Sodium extends Method_Base {
 	 * @return string
 	 */
 	public function get_constant(): string {
-		$constant = strtoupper( $this->get_crypt_obj()->get_slug() ) . '-SODIUM-HASH';
+		$slug     = $this->get_crypt_obj()->get_slug();
+		$constant = strtoupper( $slug ) . '-SODIUM-HASH';
 
 		/**
 		 * Filter the name of the constant.
@@ -213,20 +247,91 @@ class Sodium extends Method_Base {
 		 * @since 1.1.2 Available since 1.1.2.
 		 * @param string $constant The constant name.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_constant', $constant );
+		return apply_filters( $slug . '_crypt_constant', $constant );
 	}
 
 	/**
 	 * Return whether this method is usable in this hosting.
 	 *
+	 * It is, if the functions it needs are there: from the PHP extension
+	 * "sodium", or from sodium_compat, which WordPress ships and loads if
+	 * the extension is missing (wp-includes/compat.php). Both write the very
+	 * same values, so a value encrypted with one is decrypted with the other.
+	 * sodium_compat is written in PHP and slower, but fast enough for values
+	 * of this size.
+	 *
 	 * @return bool
 	 */
 	public function is_usable(): bool {
-		return extension_loaded( 'sodium' );
+		// bail if the values cannot be encoded.
+		if ( ! function_exists( 'sodium_bin2base64' ) || ! function_exists( 'sodium_base642bin' ) ) {
+			return false;
+		}
+
+		// usable with the default algorithm or the fallback for very old versions of libsodium.
+		return $this->is_algorithm_available( self::ALGO_XCHACHA20POLY1305 ) || $this->is_algorithm_available( self::ALGO_CHACHA20POLY1305 );
 	}
 
 	/**
-	 * Determine the best available AEAD algorithm tier on this server.
+	 * Return the algorithm new values are encrypted with.
+	 *
+	 * This is XChaCha20-Poly1305, unless another one is configured with
+	 * 'algorithm'. It is the algorithm WordPress uses for its secrets as
+	 * well: it does not depend on the hardware or on a recent version of
+	 * libsodium. A value encrypted with it stays readable after a move to
+	 * another server.
+	 *
+	 * Up to version 4.2.0 the fastest algorithm of the server has been
+	 * used - AEGIS-256 or AES-256-GCM, if available. Values written with
+	 * them cannot be decrypted on a server without them. The algorithm is
+	 * part of every value, so these values stay readable wherever their
+	 * algorithm is available. This behavior can be restored with
+	 * 'algorithm' => 'auto'.
+	 *
+	 * A configured algorithm, which this server does not support, is
+	 * reported once, and the default is used instead.
+	 *
+	 * @return self::ALGO_* One of the self::ALGO_* constants.
+	 */
+	private function detect_algorithm(): int {
+		// get the configured algorithm.
+		$configured = isset( $this->configuration['algorithm'] ) && is_string( $this->configuration['algorithm'] ) ? strtolower( $this->configuration['algorithm'] ) : 'xchacha20poly1305';
+
+		// use the fastest algorithm of this server, if requested.
+		if ( 'auto' === $configured ) {
+			return $this->detect_fastest_algorithm();
+		}
+
+		// use the configured algorithm, if this server supports it.
+		if ( isset( self::ALGORITHM_NAMES[ $configured ] ) && $this->is_algorithm_available( self::ALGORITHM_NAMES[ $configured ] ) ) {
+			return self::ALGORITHM_NAMES[ $configured ];
+		}
+
+		// report a configured algorithm, which cannot be used - once.
+		if ( 'xchacha20poly1305' !== $configured && ! $this->algorithm_reported ) {
+			$this->algorithm_reported = true;
+
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'sodium_algorithm_not_available',
+				'The configured algorithm for Sodium is unknown or not supported by this server. XChaCha20-Poly1305 is used instead.',
+				array(
+					'algorithm' => $configured,
+				)
+			);
+		}
+
+		// use the portable default.
+		if ( $this->is_algorithm_available( self::ALGO_XCHACHA20POLY1305 ) ) {
+			return self::ALGO_XCHACHA20POLY1305;
+		}
+
+		// return the fallback for very old versions of libsodium.
+		return self::ALGO_CHACHA20POLY1305;
+	}
+
+	/**
+	 * Return the fastest AEAD algorithm tier this server supports.
 	 *
 	 * Order of preference: AEGIS-256 (fastest, libsodium >= 1.0.19) >
 	 * AES-256-GCM (fast, but only if hardware-accelerated) > XChaCha20-
@@ -235,24 +340,37 @@ class Sodium extends Method_Base {
 	 *
 	 * @return self::ALGO_* One of the self::ALGO_* constants.
 	 */
-	private function detect_algorithm(): int {
-		// use aegis256.
-		if ( function_exists( 'sodium_crypto_aead_aegis256_encrypt' ) ) {
-			return self::ALGO_AEGIS256;
-		}
-
-		// use aes256gcm.
-		if ( function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && function_exists( 'sodium_crypto_aead_aes256gcm_is_available' ) && sodium_crypto_aead_aes256gcm_is_available() ) {
-			return self::ALGO_AES256GCM;
-		}
-
-		// use xchacha20poly1305.
-		if ( function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' ) ) {
-			return self::ALGO_XCHACHA20POLY1305;
+	private function detect_fastest_algorithm(): int {
+		foreach ( array( self::ALGO_AEGIS256, self::ALGO_AES256GCM, self::ALGO_XCHACHA20POLY1305 ) as $algorithm ) {
+			if ( $this->is_algorithm_available( $algorithm ) ) {
+				return $algorithm;
+			}
 		}
 
 		// return the default value.
 		return self::ALGO_CHACHA20POLY1305;
+	}
+
+	/**
+	 * Return whether this server can encrypt with the given algorithm tier.
+	 *
+	 * @param int $algorithm One of the self::ALGO_* constants.
+	 *
+	 * @return bool
+	 */
+	private function is_algorithm_available( int $algorithm ): bool {
+		switch ( $algorithm ) {
+			case self::ALGO_AEGIS256:
+				return function_exists( 'sodium_crypto_aead_aegis256_encrypt' );
+			case self::ALGO_AES256GCM:
+				return function_exists( 'sodium_crypto_aead_aes256gcm_encrypt' ) && function_exists( 'sodium_crypto_aead_aes256gcm_is_available' ) && sodium_crypto_aead_aes256gcm_is_available();
+			case self::ALGO_XCHACHA20POLY1305:
+				return function_exists( 'sodium_crypto_aead_xchacha20poly1305_ietf_encrypt' );
+			case self::ALGO_CHACHA20POLY1305:
+				return function_exists( 'sodium_crypto_aead_chacha20poly1305_ietf_encrypt' );
+		}
+
+		return false;
 	}
 
 	/**
@@ -375,15 +493,33 @@ class Sodium extends Method_Base {
 			return '';
 		}
 
+		// bail if the settings for the payload format contradict each other.
+		if ( ! $this->is_payload_format_configured( $context ) ) {
+			return '';
+		}
+
 		try {
-			// pick the best algorithm tier this server actually supports.
+			// get the algorithm to encrypt with: the portable default, unless configured otherwise.
 			$algorithm = $this->detect_algorithm();
 
 			// nonce length depends on the algorithm, never hardcoded.
 			$nonce = random_bytes( self::NONCE_LENGTHS[ $algorithm ] );
 
+			// get what is written in front of the nonce, and what the value is authenticated with.
+			if ( $this->uses_versioned_payload() ) {
+				// the versioned format: the header names the format and the key, and
+				// is authenticated together with the algorithm and the context.
+				$header          = $this->create_payload_header();
+				$prefix          = $header['bytes'] . chr( $algorithm );
+				$additional_data = $this->get_additional_data( $header, chr( $algorithm ), $context );
+			} else {
+				// the format of version 4.2.0: only the algorithm, and only the context is authenticated.
+				$prefix          = chr( $algorithm );
+				$additional_data = $context;
+			}
+
 			// get the algorithm to use.
-			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce, $context );
+			$encrypted_text = $this->encrypt_with( $algorithm, $plain_text, $nonce, $additional_data );
 
 			if ( false === $encrypted_text ) {
 				// log this error.
@@ -399,10 +535,11 @@ class Sodium extends Method_Base {
 				return '';
 			}
 
-			// payload layout: [1 byte algo-id][nonce][ciphertext] - no separator
+			// payload layout: [header][1 byte algo-id][nonce][ciphertext] - or,
+			// in the format of version 4.2.0, without the header. No separator
 			// character is used, so binary ':' bytes in the nonce/ciphertext can
 			// never corrupt the structure (unlike the previous explode(':', ...) approach).
-			$payload = chr( $algorithm ) . $nonce . $encrypted_text;
+			$payload = $prefix . $nonce . $encrypted_text;
 
 			// return encrypted text as base64.
 			return sodium_bin2base64( $payload, $this->get_coding_id() );
@@ -469,8 +606,22 @@ class Sodium extends Method_Base {
 			// get the payload.
 			$payload = sodium_base642bin( $encrypted_text, $this->get_coding_id() );
 
+			// a value in the versioned format begins with a header, which names
+			// the version of its format and its key. Values of version 4.2.0 and
+			// older begin with the algorithm right away - never with the header.
+			$header = $this->read_payload_header( $payload );
+
+			// bail if the value has been written by a newer version, in a format this one cannot read.
+			if ( null !== $header && ! $this->is_payload_header_supported( $header ) ) {
+				$this->report_unsupported_payload( $header, $context );
+				return '';
+			}
+
+			// get where the algorithm begins.
+			$offset = null === $header ? 0 : strlen( $header['bytes'] );
+
 			// need at least the algo byte + the smallest possible nonce.
-			if ( strlen( $payload ) < 2 ) {
+			if ( strlen( $payload ) < $offset + 2 ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_payload_not_set',
@@ -484,7 +635,7 @@ class Sodium extends Method_Base {
 				return '';
 			}
 
-			$algorithm = ord( $payload[0] );
+			$algorithm = ord( $payload[ $offset ] );
 
 			if ( ! isset( self::NONCE_LENGTHS[ $algorithm ] ) ) {
 				// log this error.
@@ -504,7 +655,7 @@ class Sodium extends Method_Base {
 			// get the length.
 			$nonce_length = self::NONCE_LENGTHS[ $algorithm ];
 
-			if ( strlen( $payload ) < 1 + $nonce_length ) {
+			if ( strlen( $payload ) < $offset + 1 + $nonce_length ) {
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_payload_mismatch',
@@ -520,13 +671,22 @@ class Sodium extends Method_Base {
 			}
 
 			// get the nonce.
-			$nonce      = substr( $payload, 1, $nonce_length );
-			$ciphertext = substr( $payload, 1 + $nonce_length );
+			$nonce      = substr( $payload, $offset + 1, $nonce_length );
+			$ciphertext = substr( $payload, $offset + 1 + $nonce_length );
 
-			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce, $context );
+			// get what the value has been authenticated with: in the versioned
+			// format the header and the algorithm as well, not only the context.
+			$additional_data = null === $header ? $context : $this->get_additional_data( $header, chr( $algorithm ), $context );
+
+			$decrypted = $this->decrypt_with( $algorithm, $ciphertext, $nonce, $additional_data );
 
 			// bail if the decrypted text is not a string.
 			if ( ! is_string( $decrypted ) ) {
+				// bail if the value names another key than the one in use: this is the reason.
+				if ( null !== $header && $this->report_other_key( $header, $context ) ) {
+					return '';
+				}
+
 				// log this error.
 				$this->get_crypt_obj()->add_error(
 					'sodium_decrypt_error',

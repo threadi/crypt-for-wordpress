@@ -170,6 +170,9 @@ PHP;
 			$files[] = substr( (string) $file, strlen( $src_path ) );
 		}
 		$files = array_values( array_diff( $files, array( 'Crypt.php' ) ) );
+
+		// the conformance traits are for tests only: the package never loads them.
+		$files = array_values( array_filter( $files, static fn( string $file ): bool => ! str_starts_with( $file, 'Testing/' ) ) );
 		sort( $files );
 
 		$listed = ( new ReflectionClass( Crypt::class ) )->getConstant( 'PACKAGE_FILES' );

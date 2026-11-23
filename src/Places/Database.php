@@ -19,6 +19,7 @@ namespace CryptForWordPress\Places;
 defined( 'ABSPATH' ) || exit;
 
 use CryptForWordPress\Crypt;
+use CryptForWordPress\Helper;
 use CryptForWordPress\Method_Base;
 use CryptForWordPress\Place_Base;
 
@@ -58,7 +59,8 @@ class Database extends Place_Base {
 	 * @return string
 	 */
 	private function get_option_name(): string {
-		$option_name = $this->get_crypt_obj()->get_slug() . '-hash';
+		$slug        = $this->get_crypt_obj()->get_slug();
+		$option_name = $slug . '-hash';
 
 		/**
 		 * Filter the name of the option in the database.
@@ -66,7 +68,7 @@ class Database extends Place_Base {
 		 * @since 2.1.0 Available since 2.1.0.
 		 * @param string $option_name The option name.
 		 */
-		return apply_filters( $this->get_crypt_obj()->get_slug() . '_crypt_database_option_name', $option_name );
+		return apply_filters( $slug . '_crypt_database_option_name', $option_name );
 	}
 
 	/**
@@ -77,6 +79,11 @@ class Database extends Place_Base {
 	public function load(): void {
 		// get the hash from the database.
 		$hash = get_option( $this->get_option_name(), '' );
+
+		// a key saved by an older version is loaded with every request: stop that.
+		if ( ! empty( $hash ) ) {
+			Helper::disable_option_autoload( $this->get_option_name() );
+		}
 
 		// get the constant this place has been told to fill.
 		$constant = $this->get_constant();
@@ -99,11 +106,18 @@ class Database extends Place_Base {
 	/**
 	 * Save the hash in this place.
 	 *
+	 * The option is not loaded with every request: otherwise the key would
+	 * be part of the list of all options, and with it of a persistent object
+	 * cache like Redis or Memcached.
+	 *
 	 * @param string $hash The hash to save.
 	 * @return void
 	 */
 	public function save( #[\SensitiveParameter] string $hash ): void {
-		update_option( $this->get_option_name(), $hash, true );
+		update_option( $this->get_option_name(), $hash, false );
+
+		// update_option() keeps the autoload, if the value has not changed.
+		Helper::disable_option_autoload( $this->get_option_name() );
 	}
 
 	/**

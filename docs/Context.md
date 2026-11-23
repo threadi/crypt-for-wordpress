@@ -43,6 +43,12 @@ if ( '' === $plain ) {
 
 The first `decrypt()` reports an error for every value that has not been migrated yet. Remove the fallback once all values are migrated: as long as it exists, a value without context is still accepted everywhere.
 
+## Binding a value to its site
+
+On a multisite network a value can additionally be bound to the site it is encrypted on, with `'bind_site' => true` in the configuration. It is not decrypted on another site then, even with the same context. See [The format of encrypted values](PayloadFormat.md#binding-a-value-to-its-site).
+
+Besides the context, every value is bound to the version of its format and to its key: they are authenticated together with it, see [The format of encrypted values](PayloadFormat.md).
+
 ## Errors
 
 An error of `encrypt()` or `decrypt()` about the value names the context in its data, so you can tell which of your values is affected:

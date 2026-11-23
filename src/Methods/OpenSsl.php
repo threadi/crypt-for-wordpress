@@ -17,6 +17,11 @@ use RuntimeException;
 
 /**
  * Object to handle crypt tasks with OpenSSL.
+ *
+ * New values are written in the versioned payload format, see
+ * Method_Base::create_payload_header(): [header][IV][tag][ciphertext] with
+ * AEAD ciphers, [header][IV][HMAC][ciphertext] with all others. Values of
+ * version 4.2.0 and older have no header: they are read in their formats.
  */
 class OpenSsl extends Method_Base {
 
@@ -47,6 +52,15 @@ class OpenSsl extends Method_Base {
 	private const NON_AEAD_FORMAT = 'v2';
 
 	/**
+	 * Label of the keys for ciphers without AEAD in the versioned format.
+	 *
+	 * The format itself is described by the header, see
+	 * Method_Base::create_payload_header(). Its keys are derived for it
+	 * alone, see encrypt_versioned_non_aead().
+	 */
+	private const VERSIONED_FORMAT = 'versioned';
+
+	/**
 	 * Placeholder in a list of keys to try for "no key at all".
 	 *
 	 * It is no key itself and never handed to the cipher. It stands for the
@@ -74,8 +88,9 @@ class OpenSsl extends Method_Base {
 	 * Constructor for this object.
 	 *
 	 * Looks for the key in this order: the constant (set by the place or by
-	 * WordPress itself), the option an uninstallation left behind, a key the
-	 * place derives itself, a place which is not the active one anymore.
+	 * WordPress itself), a key the place derives itself, the key an
+	 * uninstallation kept (as secret or option), a place which is not the
+	 * active one anymore.
 	 * Only if none of them has a key, a new one is generated - and this is
 	 * reported, if this installation had a key before.
 	 *
@@ -99,25 +114,23 @@ class OpenSsl extends Method_Base {
 
 			// a derived key is recreated on every request: it must not be
 			// written into a place. It is the key of this place, so it also
-			// wins over a key an uninstallation may have left in the database
+			// wins over a key an uninstallation may have kept
 			// - which this place could never take over.
 			$this->confirm_key();
 			return;
 		}
 
-		// get hash from the database.
-		$option_name = $this->get_crypt_obj()->get_slug() . '_hash';
-		$option_hash = get_option( $option_name, '' );
-		$this->set_hash( is_string( $option_hash ) ? $option_hash : '' );
+		// get the key an uninstallation has kept.
+		$this->set_hash( $this->get_key_kept_for_uninstall() );
 
 		// move it into its place.
 		if ( ! empty( $this->get_hash() ) ) {
 			$this->confirm_key();
 
-			// delete the old option field only if the place really holds the
-			// key now - otherwise the option stays the only copy of it.
+			// remove the kept key only if the place really holds it now -
+			// otherwise it stays the only copy of it.
 			if ( $this->persist_key() ) {
-				delete_option( $option_name );
+				$this->forget_key_kept_for_uninstall();
 			}
 
 			// run the constant for this process.
@@ -332,6 +345,11 @@ class OpenSsl extends Method_Base {
 			return '';
 		}
 
+		// bail if the settings for the payload format contradict each other.
+		if ( ! $this->is_payload_format_configured( $context ) ) {
+			return '';
+		}
+
 		// get the cipher algorithm.
 		$cipher = $this->configuration['cipher_algorithm'];
 
@@ -369,6 +387,9 @@ class OpenSsl extends Method_Base {
 			return '';
 		}
 
+		// get the header of the versioned format - or none for the format of version 4.2.0.
+		$header = $this->uses_versioned_payload() ? $this->create_payload_header() : null;
+
 		// get the iv.
 		$iv = openssl_random_pseudo_bytes( $iv_length, $crypto_strong );
 
@@ -400,7 +421,8 @@ class OpenSsl extends Method_Base {
 			// set the tag.
 			$tag = '';
 
-			// encrypt the string, with the context as additional authenticated data.
+			// encrypt the string, with the context as additional authenticated
+			// data - in the versioned format together with the header.
 			$ciphertext = openssl_encrypt(
 				$plain_text,
 				$cipher,
@@ -408,7 +430,7 @@ class OpenSsl extends Method_Base {
 				OPENSSL_RAW_DATA,
 				$iv,
 				$tag,
-				$context,
+				null === $header ? $context : $this->get_additional_data( $header, '', $context ),
 				self::AEAD_TAG_LENGTH
 			);
 
@@ -427,7 +449,13 @@ class OpenSsl extends Method_Base {
 				return '';
 			}
 
-			// return the resulting encrypted string.
+			// return the resulting encrypted string in the versioned format:
+			// [header][iv][tag][ciphertext], without any separator.
+			if ( null !== $header ) {
+				return base64_encode( $header['bytes'] . $iv . $tag . $ciphertext );
+			}
+
+			// return the resulting encrypted string in the format of version 4.2.0.
 			return base64_encode(
 				base64_encode( $iv ) . ':' .
 				base64_encode( $tag ) . ':' . // @phpstan-ignore argument.type
@@ -450,6 +478,11 @@ class OpenSsl extends Method_Base {
 
 			// do nothing more.
 			return '';
+		}
+
+		// encrypt in the versioned format.
+		if ( null !== $header ) {
+			return $this->encrypt_versioned_non_aead( $plain_text, $cipher, $iv, $hash, $header, $context );
 		}
 
 		// get two keys from the main key. They belong to this payload format
@@ -604,8 +637,18 @@ class OpenSsl extends Method_Base {
 		// prepare the original plaintext.
 		$original_plaintext = '';
 
+		// get the header of a value in the versioned format, if it is one.
+		$header = $this->read_payload_header( $c );
+
 		// handle GCM-based ciphers.
 		if ( $this->should_use_aead_tag( $cipher ) ) {
+			// decrypt a value in the versioned format. The formats of version
+			// 4.2.0 and older for these ciphers begin with a base64 character,
+			// never with the header.
+			if ( null !== $header ) {
+				return $this->decrypt_versioned_aead( $c, $header, $cipher, $iv_length, $hash, $context );
+			}
+
 			// get the parts.
 			$c_exploded = explode( ':', $c );
 
@@ -714,9 +757,26 @@ class OpenSsl extends Method_Base {
 				return '';
 			}
 
-			// the current format authenticates the IV and is marked as such. It
-			// has keys of its own and has never been written with one of the
-			// legacy keys, so there is no fallback chain for it.
+			// decrypt a value in the versioned format.
+			if ( null !== $header ) {
+				// the very first format of this method began with the random IV,
+				// so one of about 16 million of its values begins like the header
+				// by chance. It has never been bound to a context. Such a value is
+				// tried in its own format first - quietly, as almost every value
+				// which begins like this really is one in the versioned format.
+				if ( '' === $context ) {
+					$original_plaintext = $this->try_decrypt_first_format( $cipher, $c, $iv_length, $hash, $context );
+					if ( '' !== $original_plaintext ) {
+						return $original_plaintext;
+					}
+				}
+
+				return $this->decrypt_versioned_non_aead( $c, $header, $cipher, $iv_length, $hash, $context );
+			}
+
+			// the format of version 4.0.0 to 4.2.0 authenticates the IV and is
+			// marked as such. It has keys of its own and has never been written
+			// with one of the legacy keys, so there is no fallback chain for it.
 			$c_exploded = explode( ':', $c );
 			if ( 3 === count( $c_exploded ) && self::NON_AEAD_FORMAT === $c_exploded[0] ) {
 				return $this->decrypt_non_aead(
@@ -729,10 +789,6 @@ class OpenSsl extends Method_Base {
 					$context
 				);
 			}
-
-			// get the two keys the previous format derived from the main key.
-			$enc_key  = $this->derive_key( 'encryption', 32, $hash );
-			$hmac_key = $this->derive_key( 'authentication', 32, $hash );
 
 			// bail if a context is given: the formats of older versions cannot
 			// be bound to one, so this value can never have been encrypted with it.
@@ -825,22 +881,7 @@ class OpenSsl extends Method_Base {
 				}
 			}
 
-			// the current key-separation scheme first, then the decoded
-			// single-key scheme (state B), then the very original scheme with
-			// the undecoded hash string used directly (state A).
-			$legacy_key = $this->get_hash();
-			$key_pairs  = array(
-				array( $enc_key, $hmac_key ),
-				array( $hash, $hash ),
-				array( $legacy_key, $legacy_key ),
-			);
-
-			// at last no key at all, for values older versions wrote without one.
-			if ( $this->accepts_unprotected_values() ) {
-				$key_pairs[] = array( self::NO_KEY, self::NO_KEY );
-			}
-
-			foreach ( $key_pairs as $key_pair ) {
+			foreach ( $this->get_legacy_key_pairs( $hash ) as $key_pair ) {
 				// bail if this key is not available.
 				if ( '' === $key_pair[0] || '' === $key_pair[1] ) {
 					continue;
@@ -1214,6 +1255,304 @@ class OpenSsl extends Method_Base {
 			$error_code = 'openssl_decrypt_error';
 
 			// do nothing more.
+			return '';
+		}
+
+		// return the plain text.
+		return $plaintext;
+	}
+
+	/**
+	 * Return the key pairs (encryption, HMAC), which the formats of
+	 * versions before 4.0.0 for ciphers without AEAD may have been written
+	 * with - in the order they are tried.
+	 *
+	 * The key-separation scheme first, then the decoded single-key scheme
+	 * (state B), then the very original scheme with the undecoded hash
+	 * string used directly (state A). At last no key at all, for values
+	 * older versions wrote without one.
+	 *
+	 * @param string $hash The master key.
+	 *
+	 * @return array<int,array{0:string,1:string}>
+	 */
+	private function get_legacy_key_pairs( #[\SensitiveParameter] string $hash ): array {
+		$legacy_key = $this->get_hash();
+		$key_pairs  = array(
+			array( $this->derive_key( 'encryption', 32, $hash ), $this->derive_key( 'authentication', 32, $hash ) ),
+			array( $hash, $hash ),
+			array( $legacy_key, $legacy_key ),
+		);
+
+		// at last no key at all, for values older versions wrote without one.
+		if ( $this->accepts_unprotected_values() ) {
+			$key_pairs[] = array( self::NO_KEY, self::NO_KEY );
+		}
+
+		return $key_pairs;
+	}
+
+	/**
+	 * Try to decrypt a value in the very first format of this method for
+	 * ciphers without AEAD: [IV][HMAC of 32 bytes][ciphertext], without any
+	 * separator. Nothing is reported, if it is none.
+	 *
+	 * @param string $cipher    The cipher algorithm.
+	 * @param string $payload   The decoded value.
+	 * @param int    $iv_length The IV length the cipher expects.
+	 * @param string $hash      The master key.
+	 * @param string $context   The context the value is requested with.
+	 *
+	 * @return string The decrypted plaintext, or '' on failure.
+	 */
+	private function try_decrypt_first_format( string $cipher, string $payload, int $iv_length, #[\SensitiveParameter] string $hash, string $context ): string {
+		// get the parts.
+		$iv             = substr( $payload, 0, $iv_length );
+		$hmac           = substr( $payload, $iv_length, 32 );
+		$ciphertext_raw = substr( $payload, $iv_length + 32 );
+
+		// bail if the value is too short to be one in this format.
+		if ( strlen( $iv ) !== $iv_length ) {
+			return '';
+		}
+
+		foreach ( $this->get_legacy_key_pairs( $hash ) as $key_pair ) {
+			// bail if this key is not available.
+			if ( '' === $key_pair[0] || '' === $key_pair[1] ) {
+				continue;
+			}
+
+			$is_unprotected = self::NO_KEY === $key_pair[0];
+
+			$attempt_error = '';
+			$plaintext     = $this->try_decrypt_non_aead( $cipher, $ciphertext_raw, $iv, $hmac, $is_unprotected ? '' : $key_pair[0], $is_unprotected ? '' : $key_pair[1], $attempt_error );
+
+			// bail if this key does not fit.
+			if ( '' === $plaintext ) {
+				continue;
+			}
+
+			// report a value which has never been protected.
+			if ( $is_unprotected ) {
+				$this->report_unprotected_value( $context );
+			}
+
+			return $plaintext;
+		}
+
+		return '';
+	}
+
+	/**
+	 * Return everything the HMAC of a value in the versioned format for
+	 * ciphers without AEAD has to cover: the additional data - the header,
+	 * the site, if the value is bound to it, and the context -, the IV and
+	 * the ciphertext.
+	 *
+	 * The length of the additional data is in front of it, so no part of it
+	 * can ever be mistaken for a part of the IV.
+	 *
+	 * @param string $additional_data The additional data, see Method_Base::get_additional_data().
+	 * @param string $iv              The IV.
+	 * @param string $ciphertext_raw  The raw ciphertext.
+	 *
+	 * @return string
+	 */
+	private function get_versioned_mac_input( string $additional_data, string $iv, string $ciphertext_raw ): string {
+		return pack( 'J', strlen( $additional_data ) ) . $additional_data . $iv . $ciphertext_raw;
+	}
+
+	/**
+	 * Encrypt a value in the versioned format for ciphers without AEAD:
+	 * [header][IV][HMAC][ciphertext], without any separator.
+	 *
+	 * The keys for encryption and HMAC are derived for this format only:
+	 * sharing them with another format would allow passing a value of this
+	 * format off as one of that.
+	 *
+	 * @param string                                                  $plain_text The plain string.
+	 * @param string                                                  $cipher     The cipher algorithm.
+	 * @param string                                                  $iv         The IV.
+	 * @param string                                                  $hash       The master key.
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header     The header of the value.
+	 * @param string                                                  $context    The context of the value.
+	 *
+	 * @return string
+	 */
+	private function encrypt_versioned_non_aead( #[\SensitiveParameter] string $plain_text, string $cipher, string $iv, #[\SensitiveParameter] string $hash, array $header, string $context ): string {
+		// encrypt the string.
+		$ciphertext_raw = openssl_encrypt(
+			$plain_text,
+			$cipher,
+			$this->derive_key( 'encryption-' . self::VERSIONED_FORMAT, 32, $hash ),
+			OPENSSL_RAW_DATA,
+			$iv
+		);
+
+		// bail if anything failed.
+		if ( ! is_string( $ciphertext_raw ) || '' === $ciphertext_raw ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_encrypt_error',
+				'Given string could not be encrypted.',
+				array(
+					'context' => $context,
+				)
+			);
+
+			// do nothing more.
+			return '';
+		}
+
+		// get the HMAC over the header, the context, the IV and the ciphertext.
+		$hmac = hash_hmac(
+			$this->configuration['hash_algorithm'],
+			$this->get_versioned_mac_input( $this->get_additional_data( $header, '', $context ), $iv, $ciphertext_raw ),
+			$this->derive_key( 'authentication-' . self::VERSIONED_FORMAT, 32, $hash ),
+			true
+		);
+
+		// return the resulting encrypted string.
+		return base64_encode( $header['bytes'] . $iv . $hmac . $ciphertext_raw );
+	}
+
+	/**
+	 * Decrypt a value in the versioned format for AEAD ciphers:
+	 * [header][IV][tag][ciphertext].
+	 *
+	 * @param string                                                  $payload   The decoded value.
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header    The header of the value.
+	 * @param string                                                  $cipher    The cipher algorithm.
+	 * @param int                                                     $iv_length The IV length the cipher expects.
+	 * @param string                                                  $hash      The master key.
+	 * @param string                                                  $context   The context the value is requested with.
+	 *
+	 * @return string The decrypted plaintext, or '' on failure.
+	 */
+	private function decrypt_versioned_aead( string $payload, array $header, string $cipher, int $iv_length, #[\SensitiveParameter] string $hash, string $context ): string {
+		// bail if the value has been written by a newer version, in a format this one cannot read.
+		if ( ! $this->is_payload_header_supported( $header ) ) {
+			$this->report_unsupported_payload( $header, $context );
+			return '';
+		}
+
+		// bail if there is no key: no value in this format has been written without one.
+		if ( '' === $hash ) {
+			return '';
+		}
+
+		// bail if the value is too short to hold every part.
+		$offset = strlen( $header['bytes'] );
+		if ( strlen( $payload ) <= $offset + $iv_length + self::AEAD_TAG_LENGTH ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decrypt_encrypted_parts_missing',
+				'Parts of the encrypted string could not be decoded.',
+				array(
+					'context' => $context,
+				)
+			);
+
+			// do nothing more.
+			return '';
+		}
+
+		// get the parts.
+		$iv         = substr( $payload, $offset, $iv_length );
+		$tag        = substr( $payload, $offset + $iv_length, self::AEAD_TAG_LENGTH );
+		$ciphertext = substr( $payload, $offset + $iv_length + self::AEAD_TAG_LENGTH );
+
+		// decrypt the string, authenticated together with the header and the context.
+		$plaintext = openssl_decrypt( $ciphertext, $cipher, $hash, OPENSSL_RAW_DATA, $iv, $tag, $this->get_additional_data( $header, '', $context ) );
+
+		// bail if decryption failed.
+		if ( ! is_string( $plaintext ) || '' === $plaintext ) {
+			// report a value of another key - or else a value, which has been changed or belongs to another context.
+			if ( ! $this->report_other_key( $header, $context ) ) {
+				$this->add_decrypt_error( 'openssl_decrypt_aead_error', $context );
+			}
+
+			// do nothing more.
+			return '';
+		}
+
+		return $plaintext;
+	}
+
+	/**
+	 * Decrypt a value in the versioned format for ciphers without AEAD:
+	 * verify first, then decrypt.
+	 *
+	 * @param string                                                  $payload   The decoded value.
+	 * @param array{version:int,flags:int,key_id:string,bytes:string} $header    The header of the value.
+	 * @param string                                                  $cipher    The cipher algorithm.
+	 * @param int                                                     $iv_length The IV length the cipher expects.
+	 * @param string                                                  $hash      The master key.
+	 * @param string                                                  $context   The context the value is requested with.
+	 *
+	 * @return string The decrypted plaintext, or '' on failure.
+	 */
+	private function decrypt_versioned_non_aead( string $payload, array $header, string $cipher, int $iv_length, #[\SensitiveParameter] string $hash, string $context ): string {
+		// bail if the value has been written by a newer version, in a format this one cannot read.
+		if ( ! $this->is_payload_header_supported( $header ) ) {
+			$this->report_unsupported_payload( $header, $context );
+			return '';
+		}
+
+		// bail if there is no key: no value in this format has been written without one.
+		if ( '' === $hash ) {
+			return '';
+		}
+
+		// get the length of the HMAC.
+		$hmac_length = strlen( hash( $this->configuration['hash_algorithm'], '', true ) );
+
+		// bail if the value is too short to hold every part.
+		$offset = strlen( $header['bytes'] );
+		if ( strlen( $payload ) <= $offset + $iv_length + $hmac_length ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'openssl_decrypt_encrypted_parts_missing',
+				'Parts of the encrypted string could not be decoded.',
+				array(
+					'context' => $context,
+				)
+			);
+
+			// do nothing more.
+			return '';
+		}
+
+		// get the parts.
+		$iv             = substr( $payload, $offset, $iv_length );
+		$hmac           = substr( $payload, $offset + $iv_length, $hmac_length );
+		$ciphertext_raw = substr( $payload, $offset + $iv_length + $hmac_length );
+
+		// get the HMAC this value must have.
+		$expected_hmac = hash_hmac(
+			$this->configuration['hash_algorithm'],
+			$this->get_versioned_mac_input( $this->get_additional_data( $header, '', $context ), $iv, $ciphertext_raw ),
+			$this->derive_key( 'authentication-' . self::VERSIONED_FORMAT, 32, $hash ),
+			true
+		);
+
+		// bail if the HMAC does not match - before anything is decrypted.
+		if ( ! hash_equals( $expected_hmac, $hmac ) ) {
+			// report a value of another key - or else a value, which has been changed or belongs to another context.
+			if ( ! $this->report_other_key( $header, $context ) ) {
+				$this->add_decrypt_error( 'openssl_decrypt_hmac_error', $context );
+			}
+
+			// do nothing more.
+			return '';
+		}
+
+		// get the plain text.
+		$plaintext = openssl_decrypt( $ciphertext_raw, $cipher, $this->derive_key( 'encryption-' . self::VERSIONED_FORMAT, 32, $hash ), OPENSSL_RAW_DATA, $iv );
+
+		// bail if no text could be read.
+		if ( ! is_string( $plaintext ) || '' === $plaintext ) {
+			$this->add_decrypt_error( 'openssl_decrypt_error', $context );
 			return '';
 		}
 

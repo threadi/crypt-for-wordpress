@@ -20,13 +20,17 @@ class OpenSslMalformed extends CryptForWordPressTests {
 	/**
 	 * Return a Crypt object and an OpenSsl method, initialized with a known key.
 	 *
-	 * @param array<string,mixed> $config Optional configuration of the method.
+	 * @param array<string,mixed> $config        Optional configuration of the method.
+	 * @param bool                $legacy_format True to write values in the format of version 4.2.0.
 	 *
 	 * @return array{0:\CryptForWordPress\Crypt,1:\CryptForWordPress\Methods\OpenSsl}
 	 */
-	private function get_initialized_method( array $config = array() ): array {
+	private function get_initialized_method( array $config = array(), bool $legacy_format = false ): array {
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 		$crypt_obj->set_slug( 'openssl-malformed-' . uniqid( '', true ) );
+		if ( $legacy_format ) {
+			$crypt_obj->set_config( array( 'legacy_format' => true ) );
+		}
 
 		define( strtoupper( $crypt_obj->get_slug() ) . '-HASH', bin2hex( random_bytes( 32 ) ) );
 
@@ -96,12 +100,13 @@ class OpenSslMalformed extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test AEAD values with an IV of another length than the one the method writes.
+	 * Test AEAD values in the format of version 4.2.0 with an IV of another
+	 * length than the one the method writes.
 	 *
 	 * @return void
 	 */
 	public function test_aead_value_with_iv_of_wrong_length(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method();
+		list( $crypt_obj, $method ) = $this->get_initialized_method( array(), true );
 
 		$parts    = explode( ':', (string) base64_decode( $method->encrypt( 'Hallo World' ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 		$parts[0] = base64_encode( substr( (string) base64_decode( $parts[0] ), 0, 8 ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
@@ -124,13 +129,13 @@ class OpenSslMalformed extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test values of the current format without AEAD, whose IV has another
-	 * length than the cipher uses.
+	 * Test values of the format of version 4.2.0 without AEAD, whose IV has
+	 * another length than the cipher uses.
 	 *
 	 * @return void
 	 */
 	public function test_non_aead_value_with_iv_of_wrong_length(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method( array( 'cipher_algorithm' => 'aes-256-cbc' ) );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( array( 'cipher_algorithm' => 'aes-256-cbc' ), true );
 
 		$parts = explode( ':', (string) base64_decode( $method->encrypt( 'Hallo World' ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 		$this->assertCount( 3, $parts );

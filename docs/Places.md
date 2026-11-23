@@ -34,15 +34,17 @@ If you would like to keep the key separate from your database credentials, you c
 
 ## Custom Locations
 
-You can use a hook to add your own locations. The hook consists of your plugins slug followed by "_places".
+You can use a hook to add your own locations. The hook consists of your plugins slug followed by "_crypt_places".
 
-Example:
+Example for a plugin with the slug `crypt-for-wordpress-demo`:
 ```
 function cfwpd_place( array $places ): array {
- $places[] = ‘\YourNameSpace\MyPlace’;
+ $places[] = '\YourNameSpace\MyPlace';
  return $places;
 }
-add_filter( ‘crypt_for_wordpress_demo_places’, ‘cfwpd_place’ )
+add_filter( 'crypt-for-wordpress-demo_crypt_places', 'cfwpd_place' );
 ```
 
 The class you create this way must extend \CryptForWordPress\Place_Base. Take a look at the other included classes for guidance on the structure.
+
+Test it with the conformance tests of this package: [Testing places and methods of your own](Testing.md).

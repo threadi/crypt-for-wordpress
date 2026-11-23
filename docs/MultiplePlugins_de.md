@@ -24,6 +24,7 @@ Die `Crypt`-Klasse nimmt die übrigen Klassen dieses Packages aus ihrer eigenen 
 * Dein Plugin läuft möglicherweise mit einer älteren Version dieses Packages, ohne eine Korrektur, auf die du dich verlässt.
 * PHP beschwert sich nicht über ein zusätzliches Argument, das eine Funktion nicht kennt: Ein an `encrypt()` der Version 3.1.0 übergebener Kontext wird dort ignoriert. Der Wert ist nicht an ihn gebunden - und eine neuere Version wird sich später weigern, ihn mit diesem Kontext zu entschlüsseln.
 * Wird das andere Plugin entfernt oder aktualisiert, ändert sich die verwendete Version. Eine ältere Version kann nicht jeden Wert einer neueren lesen: Version 3.1.0 kann nicht lesen, was diese Version mit einem Kontext schreibt, mit einem OpenSSL-Cipher ohne AEAD, oder mit OpenSSL und einem selbst gewählten Schlüssel aus einer Umgebungs- oder Servervariable.
+* Versionen vor 4.3.0 können keinen Wert lesen, den diese Version schreibt: Seit 4.3.0 beginnt jeder Wert mit einem Header, der sein Format und seinen Schlüssel nennt (siehe [Das Format verschlüsselter Werte](PayloadFormat_de.md)). Wenn eine ältere Kopie eines anderen Plugins die verwendete sein könnte und dein Plugin keine eigene Kopie haben kann, setze für einen Übergang `'legacy_format' => true`: Neue Werte werden dann im Format der Version 4.2.0 geschrieben. Ab Version 4.3.0 wird ein Wert eines neueren Formats als `payload_version_unknown` gemeldet.
 
 In zwei Fällen können Klassen zweier Versionen dennoch aufeinandertreffen:
 

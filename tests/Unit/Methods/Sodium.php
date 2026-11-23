@@ -19,11 +19,16 @@ class Sodium extends CryptForWordPressTests {
 	 * already initialized with a known, random key - without ever writing
 	 * to a Place.
 	 *
+	 * @param bool $legacy_format True to write values in the format of version 4.2.0.
+	 *
 	 * @return array{0:\CryptForWordPress\Crypt,1:\CryptForWordPress\Methods\Sodium} The crypt object and the initialized method.
 	 */
-	private function get_initialized_method(): array {
+	private function get_initialized_method( bool $legacy_format = false ): array {
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 		$crypt_obj->set_slug( 'sodium-tamper-' . uniqid('', true) );
+		if ( $legacy_format ) {
+			$crypt_obj->set_config( array( 'legacy_format' => true ) );
+		}
 
 		$method   = new \CryptForWordPress\Methods\Sodium( $crypt_obj );
 		$constant = $method->get_constant();
@@ -57,8 +62,8 @@ class Sodium extends CryptForWordPressTests {
 	 * @return void
 	 */
 	public function test_tampered_payload_fails_to_decrypt(): void {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
 		list( $crypt_obj, $method ) = $this->get_initialized_method();
@@ -92,18 +97,18 @@ class Sodium extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test that truncating a payload down to just the algorithm byte plus a
-	 * few random bytes (too short to contain a valid nonce) is rejected
-	 * cleanly instead of causing a fatal error.
+	 * Test that truncating a payload in the format of version 4.2.0 down to
+	 * just the algorithm byte plus a few random bytes (too short to contain
+	 * a valid nonce) is rejected cleanly instead of causing a fatal error.
 	 *
 	 * @return void
 	 */
 	public function test_truncated_payload_fails_to_decrypt(): void {
-		if ( ! extension_loaded( 'sodium' ) ) {
-			$this->markTestSkipped( 'The sodium extension is not available in this test environment.' );
+		if ( ! self::is_sodium_usable() ) {
+			$this->markTestSkipped( 'Sodium is not available in this test environment.' );
 		}
 
-		list( $crypt_obj, $method ) = $this->get_initialized_method();
+		list( $crypt_obj, $method ) = $this->get_initialized_method( true );
 
 		$plain_text = 'Hallo World, this must not leak.';
 		$encrypted  = $method->encrypt( $plain_text );

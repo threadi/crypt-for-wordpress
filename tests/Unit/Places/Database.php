@@ -195,4 +195,84 @@ class Database extends CryptForWordPressTests {
 		$this->assertFalse( ( new \CryptForWordPress\Places\Database( $this->crypt_obj ) )->is_network_wide() );
 		$this->assertTrue( ( new \CryptForWordPress\Places\WpConfig( $this->crypt_obj ) )->is_network_wide() );
 	}
+
+	/**
+	 * Test that the key is saved in an option, which is not loaded with
+	 * every request - so it does not end up in a persistent object cache.
+	 *
+	 * @return void
+	 */
+	public function test_save_does_not_autoload_the_key(): void {
+		$place       = new \CryptForWordPress\Places\Database( $this->crypt_obj );
+		$option_name = $this->crypt_obj->get_slug() . '-hash';
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertSame( 'unit-test-hash-value', get_option( $option_name ) );
+		$this->assertArrayNotHasKey( $option_name, wp_load_alloptions() );
+	}
+
+	/**
+	 * Test that load() stops the autoload of a key, which an older version
+	 * has saved with autoload - and keeps its value.
+	 *
+	 * @return void
+	 */
+	public function test_load_stops_the_autoload_of_an_existing_key(): void {
+		if ( ! function_exists( 'wp_set_option_autoload' ) ) {
+			$this->markTestSkipped( 'WordPress before 6.4 cannot change the autoload of an existing option.' );
+		}
+
+		$place       = new \CryptForWordPress\Places\Database( $this->crypt_obj );
+		$option_name = $this->crypt_obj->get_slug() . '-hash';
+		$constant    = strtoupper( $this->crypt_obj->get_slug() ) . '-HASH';
+		$place->set_constant( $constant );
+
+		// as an older version saved it.
+		update_option( $option_name, 'unit-test-hash-value', true );
+		$this->assertArrayHasKey( $option_name, wp_load_alloptions() );
+
+		$place->load();
+
+		$this->assertArrayNotHasKey( $option_name, wp_load_alloptions() );
+		$this->assertSame( 'unit-test-hash-value', get_option( $option_name ) );
+		$this->assertSame( 'unit-test-hash-value', constant( $constant ) );
+	}
+
+	/**
+	 * Test that saving the same key again stops its autoload as well:
+	 * update_option() does not change the autoload of an unchanged value.
+	 *
+	 * @return void
+	 */
+	public function test_save_of_the_same_key_stops_its_autoload(): void {
+		if ( ! function_exists( 'wp_set_option_autoload' ) ) {
+			$this->markTestSkipped( 'WordPress before 6.4 cannot change the autoload of an existing option.' );
+		}
+
+		$place       = new \CryptForWordPress\Places\Database( $this->crypt_obj );
+		$option_name = $this->crypt_obj->get_slug() . '-hash';
+
+		update_option( $option_name, 'unit-test-hash-value', true );
+
+		$place->save( 'unit-test-hash-value' );
+
+		$this->assertTrue( $place->is_saved( 'unit-test-hash-value' ) );
+		$this->assertArrayNotHasKey( $option_name, wp_load_alloptions() );
+	}
+
+	/**
+	 * Test that a key saved by Crypt in the database is not autoloaded.
+	 *
+	 * @return void
+	 */
+	public function test_generated_key_is_not_autoloaded(): void {
+		$this->crypt_obj->set_config( array( 'force_place' => 'database' ) );
+
+		$this->assertNotSame( '', $this->crypt_obj->encrypt( 'Hallo World' ) );
+
+		$option_name = $this->crypt_obj->get_slug() . '-hash';
+		$this->assertNotEmpty( get_option( $option_name ) );
+		$this->assertArrayNotHasKey( $option_name, wp_load_alloptions() );
+	}
 }

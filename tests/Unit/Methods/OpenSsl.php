@@ -29,12 +29,16 @@ class OpenSsl extends CryptForWordPressTests {
      *
      * @param string $slug_prefix A short prefix identifying the calling test.
      * @param array<string,mixed> $config Optional method configuration (e.g., a different cipher).
+     * @param bool $legacy_format True to write values in the format of version 4.2.0.
      *
      * @return array{0:\CryptForWordPress\Crypt,1:\CryptForWordPress\Methods\OpenSsl} The crypt object and the initialized method.
      */
-	private function get_initialized_method( string $slug_prefix, array $config = array() ): array {
+	private function get_initialized_method( string $slug_prefix, array $config = array(), bool $legacy_format = false ): array {
 		$crypt_obj = new \CryptForWordPress\Crypt( self::get_plugin_path() );
 		$crypt_obj->set_slug( $slug_prefix . '-' . uniqid('', true) );
+		if ( $legacy_format ) {
+			$crypt_obj->set_config( array( 'legacy_format' => true ) );
+		}
 
 		// define the constant Method_Base::get_constant() expects, with a
 		// known, fixed-length hex key - exactly the format encrypt()/decrypt()
@@ -57,13 +61,13 @@ class OpenSsl extends CryptForWordPressTests {
 
 	/**
 	 * Test that flipping a bit in the ciphertext of a default (AEAD/GCM)
-	 * encrypted value makes it fail to decrypt, instead of silently
+	 * encrypted value in the format of version 4.2.0 makes it fail to decrypt, instead of silently
 	 * returning corrupted plaintext.
 	 *
 	 * @return void
 	 */
 	public function test_tampered_ciphertext_fails_to_decrypt(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-ct' );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-ct', array(), true );
 
 		$plain_text = 'Hallo World, this must not leak.';
 		$encrypted  = $method->encrypt( $plain_text );
@@ -89,13 +93,13 @@ class OpenSsl extends CryptForWordPressTests {
 
 	/**
 	 * Test that flipping a bit in the AEAD tag of a default (GCM) encrypted
-	 * value makes it fail to decrypt - this is the actual authentication
+	 * value in the format of version 4.2.0 makes it fail to decrypt - this is the actual authentication
 	 * check, distinct from tampering with the ciphertext itself.
 	 *
 	 * @return void
 	 */
 	public function test_tampered_tag_fails_to_decrypt(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-tag' );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-tag', array(), true );
 
 		$plain_text = 'Hallo World, this must not leak.';
 		$encrypted  = $method->encrypt( $plain_text );
@@ -119,13 +123,13 @@ class OpenSsl extends CryptForWordPressTests {
 
 	/**
 	 * Test that flipping a bit in the HMAC of a non-AEAD (e.g. CBC) encrypted
-	 * value is detected and rejected, instead of returning unauthenticated
+	 * value in the format of version 4.2.0 is detected and rejected, instead of returning unauthenticated
 	 * plaintext.
 	 *
 	 * @return void
 	 */
 	public function test_tampered_hmac_fails_to_decrypt_non_aead(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-hmac', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-hmac', array( 'cipher_algorithm' => 'AES-256-CBC' ), true );
 
 		$plain_text = 'must not be readable if tampered';
 		$encrypted  = $method->encrypt( $plain_text );
@@ -220,15 +224,15 @@ class OpenSsl extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test that changing the IV of a non-AEAD (e.g. CBC) encrypted value is
-	 * detected. With CBC the IV decides what the first block decrypts to: if
+	 * Test that changing the IV of a non-AEAD (e.g. CBC) encrypted value in
+	 * the format of version 4.2.0 is detected. With CBC the IV decides what the first block decrypts to: if
 	 * the HMAC does not cover it, the first 16 bytes of the plaintext can be
 	 * rewritten at will without knowing the key.
 	 *
 	 * @return void
 	 */
 	public function test_tampered_iv_fails_to_decrypt_non_aead(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-iv', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-tamper-iv', array( 'cipher_algorithm' => 'AES-256-CBC' ), true );
 
 		$encrypted = $method->encrypt( 'role=user;token=abcdef' );
 		$this->assertNotEmpty( $encrypted );
@@ -310,15 +314,15 @@ class OpenSsl extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test that the current format does not share its keys with the format
-	 * of older versions. With shared keys the bytes its HMAC covers could be
+	 * Test that the format of version 4.2.0 does not share its keys with the
+	 * format of older versions. With shared keys the bytes its HMAC covers could be
 	 * presented as a ciphertext of the old format, with the HMAC still
 	 * matching.
 	 *
 	 * @return void
 	 */
 	public function test_current_non_aead_format_has_keys_of_its_own(): void {
-		list( , $method ) = $this->get_initialized_method( 'openssl-own-keys', array( 'cipher_algorithm' => 'AES-256-CBC' ) );
+		list( , $method ) = $this->get_initialized_method( 'openssl-own-keys', array( 'cipher_algorithm' => 'AES-256-CBC' ), true );
 
 		$encrypted = $method->encrypt( 'sk_live_this-is-the-secret' );
 
@@ -340,14 +344,15 @@ class OpenSsl extends CryptForWordPressTests {
 	}
 
 	/**
-	 * Test that only the full, 16 byte AEAD tag is accepted. OpenSSL itself
+	 * Test that only the full, 16 byte AEAD tag is accepted in the format of
+	 * version 4.2.0. OpenSSL itself
 	 * accepts shorter tags too: a value whose tag has been cut down to 4
 	 * bytes would still decrypt - and a 4 byte tag can be forged by trying.
 	 *
 	 * @return void
 	 */
 	public function test_truncated_tag_is_rejected(): void {
-		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-short-tag' );
+		list( $crypt_obj, $method ) = $this->get_initialized_method( 'openssl-short-tag', array(), true );
 
 		$encrypted = $method->encrypt( 'Hallo World, this must not leak.' );
 		$parts     = explode( ':', (string) base64_decode( $encrypted, true ) );
@@ -380,7 +385,7 @@ class OpenSsl extends CryptForWordPressTests {
 			$this->markTestSkipped( 'chacha20-poly1305 is not available on this hosting.' );
 		}
 
-		list( , $method ) = $this->get_initialized_method( 'openssl-short-tag-chacha', array( 'cipher_algorithm' => 'chacha20-poly1305' ) );
+		list( , $method ) = $this->get_initialized_method( 'openssl-short-tag-chacha', array( 'cipher_algorithm' => 'chacha20-poly1305' ), true );
 
 		$encrypted = $method->encrypt( 'Hallo World, this must not leak.' );
 		$this->assertSame( 'Hallo World, this must not leak.', $method->decrypt( $encrypted ) );

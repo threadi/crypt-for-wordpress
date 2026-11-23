@@ -129,4 +129,34 @@ class Helper {
 		// return the default value.
 		return (int) octdec( '0640' );
 	}
+
+	/**
+	 * Make sure the given option is not loaded with every request.
+	 *
+	 * An option, which WordPress loads with every request, ends up in the
+	 * list of all options - and with it in a persistent object cache like
+	 * Redis or Memcached. A key does not belong there.
+	 *
+	 * The autoload of an existing option is not changed by update_option(),
+	 * if its value stays the same. So it is changed here, if it is still
+	 * set. Before WordPress 6.4 this is not possible: nothing is done then.
+	 *
+	 * @param string $option_name The name of the option.
+	 *
+	 * @return void
+	 */
+	public static function disable_option_autoload( string $option_name ): void {
+		// bail if WordPress cannot change the autoload of an existing option.
+		if ( ! function_exists( 'wp_set_option_autoload' ) ) {
+			return;
+		}
+
+		// bail if the option is not loaded with every request.
+		if ( ! array_key_exists( $option_name, wp_load_alloptions() ) ) {
+			return;
+		}
+
+		// load it only if it is requested.
+		wp_set_option_autoload( $option_name, false );
+	}
 }
