@@ -263,6 +263,26 @@ class OpenSsl extends Method_Base {
 	}
 
 	/**
+	 * Return a new key for this method, as it is stored - or an empty
+	 * string, if none could be generated. See rotate_key().
+	 *
+	 * @return string
+	 */
+	protected function generate_key(): string {
+		return $this->generate_hash();
+	}
+
+	/**
+	 * Return whether this method writes new values in the versioned payload
+	 * format: it does.
+	 *
+	 * @return bool
+	 */
+	protected function writes_payload_header(): bool {
+		return true;
+	}
+
+	/**
 	 * Return whether PHP can derive keys and calculate an HMAC with the
 	 * configured hash algorithm.
 	 *

@@ -132,6 +132,14 @@ class Crypt {
 	private array $error_log = array();
 
 	/**
+	 * The errors collect_errors() holds back right now - or null, if none
+	 * are held back.
+	 *
+	 * @var array<int,array{code:string,message:string,data:array<string,mixed>}>|null
+	 */
+	private ?array $collected_errors = null;
+
+	/**
 	 * Constructor for this object.
 	 *
 	 * @param string $plugin_path The path to the WordPress plugin using this object. E.g., __FILE__.
@@ -266,6 +274,12 @@ class Crypt {
 	 */
 	public function get_method(): false|Method_Base {
 		if ( $this->method instanceof Method_Base ) {
+			// take over a key, which another object has changed during this
+			// request - unless it is a method of an older copy of this package.
+			if ( method_exists( $this->method, 'refresh_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+				$this->method->refresh_key();
+			}
+
 			return $this->method;
 		}
 
@@ -455,7 +469,13 @@ class Crypt {
 			return '';
 		}
 
-		// decrypt the string with the detected method.
+		// decrypt the string with the detected method - with the previous key
+		// as well, if the value has been encrypted before a rotation. A method
+		// of an older copy of this package knows no previous key.
+		if ( method_exists( $method_obj, 'decrypt_with_any_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return $method_obj->decrypt_with_any_key( $encrypted_text, $context );
+		}
+
 		return '' === $context ? $method_obj->decrypt( $encrypted_text ) : $method_obj->decrypt_with_context( $encrypted_text, $context );
 	}
 
@@ -504,7 +524,7 @@ class Crypt {
 		}
 
 		// return the errors of this call.
-		return $this->get_errors_since( $errors_before, 'encrypt_failed', 'The value could not be encrypted.', $context );
+		return $this->get_errors_since( $errors_before, 'encrypt_failed', 'The value could not be encrypted.', array( 'context' => $context ) );
 	}
 
 	/**
@@ -554,23 +574,23 @@ class Crypt {
 		}
 
 		// return the errors of this call.
-		return $this->get_errors_since( $errors_before, 'decrypt_failed', 'The value could not be decrypted.', $context );
+		return $this->get_errors_since( $errors_before, 'decrypt_failed', 'The value could not be decrypted.', array( 'context' => $context ) );
 	}
 
 	/**
 	 * Return a WP_Error with the given error, followed by every error, which
 	 * has been reported after the given number of errors.
 	 *
-	 * @param int    $error_count The number of errors reported before.
-	 * @param string $code        The code of the error.
-	 * @param string $message     The message of the error.
-	 * @param string $context     The context of the value.
+	 * @param int                 $error_count The number of errors reported before.
+	 * @param string              $code        The code of the error.
+	 * @param string              $message     The message of the error.
+	 * @param array<string,mixed> $data        The data of the error.
 	 *
 	 * @return WP_Error
 	 */
-	private function get_errors_since( int $error_count, string $code, string $message, string $context ): WP_Error {
+	private function get_errors_since( int $error_count, string $code, string $message, array $data ): WP_Error {
 		// create the error.
-		$error = new WP_Error( $code, $message, array( 'context' => $context ) );
+		$error = new WP_Error( $code, $message, $data );
 
 		// add every error reported since then.
 		foreach ( $this->error_log as $number => $entry ) {
@@ -580,6 +600,219 @@ class Crypt {
 		}
 
 		return $error;
+	}
+
+	/**
+	 * Return the value encrypted again with the key in use and the current
+	 * settings - or the value as it is, if it needs no new encryption.
+	 *
+	 * A value needs it, if it has been encrypted
+	 * - with the previous key, before rotate_key(),
+	 * - in the format of a version before 4.3.0, which does not name its key,
+	 * - with other settings of the format, e.g. before 'bind_site' has been set.
+	 *
+	 * Use it to move your values to the new key after a rotation: save the
+	 * result, if it differs from the value. Until then decrypt() reads them
+	 * with the previous key, see docs/KeyRotation.md.
+	 *
+	 * A WP_Error is returned, if the value could not be decrypted ("decrypt_failed")
+	 * or encrypted again ("encrypt_failed"), with the errors of this call.
+	 * An empty value and a value whose content is empty are returned as they are.
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @param string $encrypted_text The encrypted value.
+	 * @param string $context        Optional. The context the value has been encrypted with. The new value is bound to it as well.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function reencrypt( string $encrypted_text, string $context = '' ): string|WP_Error {
+		// bail if there is no value.
+		if ( '' === $encrypted_text ) {
+			return '';
+		}
+
+		// remember which errors have been reported before this call.
+		$errors_before = $this->error_count;
+
+		// get the active method first, see decrypt_or_error().
+		$method_obj          = $this->get_method();
+		$errors_before_value = $this->error_count;
+
+		// decrypt the value.
+		$plain_text = $this->decrypt( $encrypted_text, $context );
+
+		// bail if it could not be decrypted - or its content is empty: there is nothing to encrypt.
+		if ( '' === $plain_text ) {
+			if ( false !== $method_obj && $errors_before_value === $this->error_count ) {
+				return $encrypted_text;
+			}
+
+			return $this->get_errors_since( $errors_before, 'decrypt_failed', 'The value could not be decrypted.', array( 'context' => $context ) );
+		}
+
+		// bail if the value is up to date - or a method of an older copy of this package cannot tell.
+		if ( false === $method_obj || ! method_exists( $method_obj, 'needs_new_encryption' ) || ! $method_obj->needs_new_encryption( $encrypted_text ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			return $encrypted_text;
+		}
+
+		// encrypt it again.
+		$encrypted = $this->encrypt( $plain_text, $context );
+
+		// bail if this failed.
+		if ( '' === $encrypted ) {
+			return $this->get_errors_since( $errors_before, 'encrypt_failed', 'The value could not be encrypted.', array( 'context' => $context ) );
+		}
+
+		return $encrypted;
+	}
+
+	/**
+	 * Replace the key of the active method by a new one.
+	 *
+	 * The key in use is kept as previous key: decrypt() reads the values
+	 * encrypted with it, until discard_previous_keys() is called. New values
+	 * are encrypted with the new key. Move every value to the new key with
+	 * reencrypt() - only your plugin knows where they are saved. Nothing of
+	 * this happens by itself.
+	 *
+	 * The new key is only saved in the active place, and only if this place
+	 * holds the key in use - otherwise the place, which holds the key in use,
+	 * would keep winning. A key, which its place derives (WordPress salts),
+	 * or which is given by a variable of the environment or the server,
+	 * cannot be replaced this way. As long as a previous key exists, no new
+	 * rotation is possible: the previous key would be lost.
+	 *
+	 * A WP_Error with the code "key_rotation_failed" is returned otherwise,
+	 * with the reasons - mostly "key_rotation_not_possible" with the reason
+	 * in its data.
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @return true|WP_Error
+	 */
+	public function rotate_key(): true|WP_Error {
+		return $this->change_key( 'rotate_key' );
+	}
+
+	/**
+	 * Use the previous key again: it becomes the key in use, and the key in
+	 * use becomes the previous key.
+	 *
+	 * Values encrypted since the rotation stay readable this way, as values
+	 * of the previous key. The same conditions as for rotate_key() apply.
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @return true|WP_Error
+	 */
+	public function rollback_key_rotation(): true|WP_Error {
+		return $this->change_key( 'rollback_key_rotation' );
+	}
+
+	/**
+	 * Replace the key of the active method with the given task of the method.
+	 *
+	 * @param string $task "rotate_key" or "rollback_key_rotation".
+	 *
+	 * @return true|WP_Error
+	 */
+	private function change_key( string $task ): true|WP_Error {
+		// remember which errors have been reported before this call.
+		$errors_before = $this->error_count;
+
+		// get the active method.
+		$method_obj = $this->get_method();
+
+		// bail if there is none.
+		if ( false === $method_obj ) {
+			// log this error.
+			$this->add_error(
+				'no_method_available',
+				'Could not find any supported method to encrypt strings.'
+			);
+		} elseif ( ! method_exists( $method_obj, $task ) ) {
+			// log this error: a method of an older copy of this package cannot do this.
+			$this->add_error(
+				'key_rotation_not_possible',
+				'The key cannot be replaced. The method does not support it.',
+				array(
+					'method' => $method_obj->get_name(),
+					'reason' => 'not_supported',
+				)
+			);
+		} elseif ( 'rotate_key' === $task ? $method_obj->rotate_key() : $method_obj->rollback_key_rotation() ) {
+			return true;
+		}
+
+		return $this->get_errors_since( $errors_before, 'key_rotation_failed', 'The key could not be replaced.', array() );
+	}
+
+	/**
+	 * Remove the previous keys of every method, which rotate_key() has kept.
+	 *
+	 * Values, which are still encrypted with a previous key, cannot be
+	 * decrypted anymore. So only call it after every value has been
+	 * encrypted again with reencrypt(). Afterward the key can be rotated again.
+	 *
+	 * @since 4.3.0 Available since 4.3.0.
+	 *
+	 * @return void
+	 */
+	public function discard_previous_keys(): void {
+		foreach ( $this->get_method_objects( true ) as $obj ) {
+			// (a method of an older copy of this package keeps no previous key.)
+			if ( method_exists( $obj, 'discard_previous_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+				$obj->discard_previous_key();
+			}
+		}
+
+		// forget the previous key the active method knows.
+		if ( $this->method instanceof Method_Base && method_exists( $this->method, 'discard_previous_key' ) ) { // @phpstan-ignore function.alreadyNarrowedType
+			$this->method->discard_previous_key();
+		}
+	}
+
+	/**
+	 * Run the given callback, and hold back the errors it reports - instead
+	 * of reporting them.
+	 *
+	 * Used to try something, whose errors only matter if nothing else works.
+	 * Report them with add_errors() then.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param callable():string $callback The callback.
+	 *
+	 * @return array{0:string,1:array<int,array{code:string,message:string,data:array<string,mixed>}>} The result of the callback, and its errors.
+	 */
+	public function collect_errors( callable $callback ): array {
+		$outer_errors           = $this->collected_errors;
+		$this->collected_errors = array();
+
+		try {
+			$result = $callback();
+		} finally {
+			$errors                 = $this->collected_errors;
+			$this->collected_errors = $outer_errors;
+		}
+
+		return array( $result, $errors );
+	}
+
+	/**
+	 * Report errors, which collect_errors() has held back.
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @param array<int,array{code:string,message:string,data:array<string,mixed>}> $errors The errors.
+	 *
+	 * @return void
+	 */
+	public function add_errors( array $errors ): void {
+		foreach ( $errors as $error ) {
+			$this->add_error( $error['code'], $error['message'], $error['data'] );
+		}
 	}
 
 	/**
@@ -1187,6 +1420,18 @@ class Crypt {
 	 * @return void
 	 */
 	public function add_error( string $code, string $message, array $data = array() ): void {
+		// hold it back, if collect_errors() asks for it.
+		if ( null !== $this->collected_errors ) {
+			$this->collected_errors[] = array(
+				'code'    => $code,
+				'message' => $message,
+				'data'    => $data,
+			);
+
+			// do nothing more.
+			return;
+		}
+
 		// create a new error object, if not already set.
 		if ( null === $this->errors ) {
 			$this->errors = new WP_Error();

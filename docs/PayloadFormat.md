@@ -29,7 +29,9 @@ The ID of the key is no secret. It cannot be used to decrypt anything, and it is
 
 ## Existing values
 
-Values of version 4.2.0 and older are read as before, in every format. They are not changed: they get the new format once your plugin encrypts and saves them again. As long as they have no header, a value of another key is reported with the error of the method, e.g. `sodium_decrypt_error`.
+Values of version 4.2.0 and older are read as before, in every format. They are not changed: they get the new format once your plugin encrypts and saves them again. As long as they have no header, a value of another key is reported with the error of the method, e.g. `sodium_decrypt_error`. `reencrypt()` moves a value into the current format, see [Rotating the key](KeyRotation.md).
+
+After a [rotation](KeyRotation.md) a value, which names the previous key, is decrypted with it - and not reported as `key_mismatch`, until the previous key is discarded.
 
 ## Settings
 

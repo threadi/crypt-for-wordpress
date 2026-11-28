@@ -59,6 +59,8 @@ Der Hoster kann diese Secrets in einem Key-Management-Service aufbewahren, alte 
 * Werte, die mit einem [Kontext](Context_de.md) an das gebunden sind, wozu sie gehören,
 * Plugins, die WordPress-Versionen vor 7.2 unterstützen.
 
+Beide erlauben es, den Schlüssel zu ersetzen, während die bisher verschlüsselten Werte lesbar bleiben: siehe [Den Schlüssel rotieren](KeyRotation_de.md).
+
 **Beides zusammen**: Seit WordPress 7.2 speichert dieses Package seinen eigenen Schlüssel über die Secrets API, wenn die `wp-config.php` nicht geschrieben werden kann - siehe [Speicherorte](Places_de.md).
 
 Verschlüssele nicht doppelt: Übergib nie einen von diesem Package verschlüsselten Wert an `wp_set_secret()` oder `wp_import_option_as_secret()`. Das Secret wäre dann der verschlüsselte Wert, lesbar nur mit dem Schlüssel dieses Packages. Entschlüssele ihn zuerst, speichere den Klartext als Secret und lösche die Option danach.

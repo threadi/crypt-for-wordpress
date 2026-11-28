@@ -59,6 +59,8 @@ The hosting can keep these secrets in a key management service, old values remai
 * values which are bound to what they belong to, with a [context](Context.md),
 * plugins which support WordPress versions before 7.2.
 
+Both allow replacing the key, while the values encrypted so far stay readable: see [Rotating the key](KeyRotation.md).
+
 **Both together**: since WordPress 7.2, this package saves its own key with the Secrets API, if the `wp-config.php` cannot be written - see [Places](Places.md).
 
 Do not encrypt twice: never hand a value encrypted by this package to `wp_set_secret()` or `wp_import_option_as_secret()`. The secret would be the encrypted value, readable only with the key of this package. Decrypt it first, save the plain value as secret, and delete the option afterward.

@@ -29,7 +29,9 @@ Die ID des Schlüssels ist kein Geheimnis. Mit ihr lässt sich nichts entschlüs
 
 ## Bestehende Werte
 
-Werte der Version 4.2.0 und älter werden wie bisher gelesen, in jedem Format. Sie werden nicht verändert: Das neue Format bekommen sie, sobald dein Plugin sie neu verschlüsselt und speichert. Solange sie keinen Header haben, wird ein Wert eines anderen Schlüssels mit dem Fehler der Methode gemeldet, z.B. `sodium_decrypt_error`.
+Werte der Version 4.2.0 und älter werden wie bisher gelesen, in jedem Format. Sie werden nicht verändert: Das neue Format bekommen sie, sobald dein Plugin sie neu verschlüsselt und speichert. Solange sie keinen Header haben, wird ein Wert eines anderen Schlüssels mit dem Fehler der Methode gemeldet, z.B. `sodium_decrypt_error`. `reencrypt()` bringt einen Wert ins aktuelle Format, siehe [Den Schlüssel rotieren](KeyRotation_de.md).
+
+Nach einer [Rotation](KeyRotation_de.md) wird ein Wert, der den vorherigen Schlüssel nennt, mit diesem entschlüsselt - und nicht als `key_mismatch` gemeldet, bis der vorherige Schlüssel verworfen wird.
 
 ## Einstellungen
 

@@ -178,6 +178,26 @@ foreach ( $args['hash_types'] as $hash_type ) {
 	);
 }
 
+// a rotation of the key, as a plugin does it.
+$crypt = new CryptForWordPress\Crypt( $args['plugin_file'] );
+$crypt->set_slug( $slug . '-rotation' );
+$crypt->set_config(
+	array(
+		'force_method' => 'sodium',
+		'force_place'  => 'database',
+	)
+);
+$before  = $crypt->encrypt( $args['plain'], $args['context'] );
+$rotated = $crypt->rotate_key();
+$moved   = $crypt->reencrypt( $before, $args['context'] );
+$crypt->discard_previous_keys();
+
+$result['rotation'] = array(
+	'rotated' => true === $rotated,
+	'moved'   => is_string( $moved ) && $moved !== $before && $args['plain'] === $crypt->decrypt( $moved, $args['context'] ),
+	'codes'   => crypt_for_wordpress_compat_codes( $crypt ),
+);
+
 // remove everything this request saved - one by one: a DELETE of a range
 // would wait for the locks of the test, which runs in a transaction.
 global $wpdb;

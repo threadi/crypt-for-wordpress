@@ -169,4 +169,91 @@ class NextRequest extends CryptForWordPressTests {
 		$this->assertSame( $this->arguments['plain'], $again['plain'] );
 		$this->assertSame( $written['key_id'], $again['key_id'] );
 	}
+	/**
+	 * Test that a rotated key is loaded by the next request from every
+	 * place, which can save a key - and that the values of the former key
+	 * stay readable until the previous key is discarded.
+	 *
+	 * @dataProvider combinations
+	 *
+	 * @param string $method The method.
+	 * @param string $place  The place.
+	 *
+	 * @return void
+	 */
+	public function test_rotated_key_is_used_by_the_next_request( string $method, string $place ): void {
+		if ( ! function_exists( 'shell_exec' ) || ! function_exists( 'escapeshellarg' ) ) {
+			$this->markTestSkipped( 'Running a PHP process is not possible here.' );
+		}
+
+		if ( 'secrets_api' === $place && ! function_exists( 'wp_get_secret' ) ) {
+			$this->markTestSkipped( 'The Secrets API is not available in this WordPress version.' );
+		}
+
+		if ( 'muplugin' === $place && ( ! defined( 'WPMU_PLUGIN_DIR' ) || ! is_writable( is_dir( WPMU_PLUGIN_DIR ) ? WPMU_PLUGIN_DIR : dirname( WPMU_PLUGIN_DIR ) ) ) ) {
+			$this->markTestSkipped( 'The "must-use"-plugin directory is not writable here.' );
+		}
+
+		$slug = 'next-rotation-' . $method . '-' . str_replace( array( '.', '_' ), '-', strtolower( uniqid( '', true ) . '-' . $place ) );
+
+		// the files of this test.
+		$wp_config   = sys_get_temp_dir() . '/crypt-for-wordpress-next-request-wp-config-' . $slug . '.php';
+		$custom_file = sys_get_temp_dir() . '/crypt-for-wordpress-next-request-key-' . $slug . '.php';
+		file_put_contents( $wp_config, "<?php\n/* That's all, stop editing! Happy publishing. */\n\nif ( ! defined( 'ABSPATH' ) ) {\n\tdefine( 'ABSPATH', __DIR__ . '/' );\n}\n" );
+		$this->files = array( $wp_config, $wp_config . '.lock', $custom_file );
+
+		$this->arguments = array(
+			'config'      => CRYPT_FOR_WORDPRESS_TESTS_CONFIG,
+			'src'         => dirname( __DIR__, 2 ) . '/src',
+			'plugin_file' => self::get_plugin_path(),
+			'slug'        => $slug,
+			'method'      => $method,
+			'place'       => $place,
+			'wp_config'   => $wp_config,
+			'custom_file' => $custom_file,
+			'plain'       => "Hällo Wörld\nrotated",
+			'context'     => 'api_secret',
+			'multisite'   => is_multisite(),
+		);
+
+		// the first request: a key is generated, a value encrypted.
+		$written = $this->run_request( 'write', $this->arguments );
+		$this->assertNotSame( '', $written['value'], (string) wp_json_encode( $written ) );
+		$this->assertTrue( $written['saved_in_place'], (string) wp_json_encode( $written ) );
+		$this->arguments['root_key_existed'] = $written['root_key_existed'];
+		$old_value                           = $written['value'];
+
+		// the second request: the key is rotated.
+		$rotated = $this->run_request( 'rotate', array_merge( $this->arguments, array( 'value' => $old_value ) ) );
+		$this->assertTrue( $rotated['rotated'], (string) wp_json_encode( $rotated ) );
+		$this->assertSame( $this->arguments['plain'], $rotated['plain'] );
+		$this->assertNotSame( $written['key_id'], $rotated['key_id'] );
+		$new_value = $rotated['value'];
+
+		// the next request loads the new key from its place, and reads both values.
+		foreach ( array( $old_value, $new_value ) as $value ) {
+			$read = $this->run_request( 'read', array_merge( $this->arguments, array( 'value' => $value ) ) );
+			$this->assertSame( $this->arguments['plain'], $read['plain'], (string) wp_json_encode( $read ) );
+			$this->assertSame( $rotated['key_id'], $read['key_id'] );
+
+			foreach ( array( 'key_missing', 'key_changed', 'key_not_saved', 'key_unavailable', 'key_in_inactive_place', 'key_mismatch' ) as $code ) {
+				$this->assertNotContains( $code, $read['codes'] );
+			}
+		}
+
+		// the old value is moved to the new key.
+		$moved = $this->run_request( 'reencrypt', array_merge( $this->arguments, array( 'value' => $old_value ) ) );
+		$this->assertIsString( $moved['value'], (string) wp_json_encode( $moved ) );
+		$this->assertNotSame( $old_value, $moved['value'] );
+
+		// after the previous key has been discarded, only the moved value is readable.
+		$this->run_request( 'discard', $this->arguments );
+
+		$read = $this->run_request( 'read', array_merge( $this->arguments, array( 'value' => $moved['value'] ) ) );
+		$this->assertSame( $this->arguments['plain'], $read['plain'] );
+
+		$read = $this->run_request( 'read', array_merge( $this->arguments, array( 'value' => $old_value ) ) );
+		$this->assertSame( '', $read['plain'] );
+		$this->assertContains( 'key_mismatch', $read['codes'] );
+	}
 }

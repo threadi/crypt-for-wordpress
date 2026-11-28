@@ -19,6 +19,14 @@
 - Added the setting `'legacy_format' => true`: new values are written in the format of version 4.2.0, e.g. as long as other plugins ship an older copy of this package. Together with `'bind_site'` nothing is encrypted, and "bind_site_not_possible" is reported
 - Added test vectors of the versioned payload format
 - Added tests of Sodium with the sodium_compat of WordPress - in a PHP process without the functions of the extension, and in a test run without the extension on GitHub
+- Added the rotation of the key: `rotate_key()` on the Crypt object replaces the key of the active method by a new one, saved in the active place only. The former key is kept as previous key, encrypted with the new one, in the option `{slug}_crypt_previous_key_{method}`, which is not loaded with every request. `decrypt()` reads the values of both keys, until `discard_previous_keys()` is called. Nothing of this happens by itself: your plugin starts the rotation and moves its values. See docs/KeyRotation.md
+- Added `reencrypt()` on the Crypt object: it returns a value encrypted again with the key in use and the current settings - if it has been encrypted with the previous key, in the format of a version before 4.3.0 or with other settings like `'bind_site'`. Otherwise it returns the value as it is
+- Added `rollback_key_rotation()` on the Crypt object: the previous key is used again, and the key in use becomes the previous key
+- Added `discard_previous_keys()` on the Crypt object
+- Added the action `{slug}_crypt_key_rotated` with the fingerprints of the former and the new key, and the name of the method
+- Added the errors "key_rotation_failed", "key_rotation_not_possible" (with the reason in its data), "previous_key_not_saved" and "previous_key_unreadable"
+- Added `generate_key()` and `get_hash_from_stored_key()` to methods: a method of your own supports the rotation, if it overrides `generate_key()`
+- Added tests for the rotation, the rollback and interrupted rotations - also across real requests with every place, which can save a key
 
 ### Changed
 
@@ -29,6 +37,9 @@
 - Sodium encrypts new values with XChaCha20-Poly1305, as WordPress does for its secrets - not anymore with the fastest algorithm of the server. Values written with AEGIS-256 or AES-256-GCM could not be decrypted on a server without it. Values of every algorithm stay readable. `'algorithm' => 'auto'` restores the former behavior
 - Every hook name starts with the variable `$slug` now, so wp-documentor can read it. The names of the hooks are unchanged
 - The method Sodium is usable without the PHP extension "sodium": with the sodium_compat, which WordPress loads then. It writes the very same values, so values stay readable after a move to a server without the extension. `ext-sodium` is no longer required by composer.json, only suggested
+- A value in the format of version 4.2.0, which cannot be decrypted with the key in use, is decrypted with the previous key of a rotation. The failed attempt is only reported, if both fail
+- A rotation, whose request has ended before the fingerprint of the new key could be remembered, is not reported as "key_changed" by the next request
+- If the key is lost ("key_missing") or the kept keys are discarded, the previous key of a rotation is removed as well: it has been encrypted with that key
 - New values are written in the versioned payload format. Versions before 4.3.0 cannot read it - see `'legacy_format'`. Values of every older format stay readable and keep their format until they are encrypted again
 
 ### Fixed

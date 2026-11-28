@@ -23,7 +23,32 @@ Version | Description
 ------- | -----------
 `2.0.0` | Available since 2.0.0.
 
-Source: [src/Crypt.php](../src/Crypt.php), [line 1211](../src/Crypt.php#L1211-L1220)
+Source: [src/Crypt.php](../src/Crypt.php), [line 1456](../src/Crypt.php#L1456-L1465)
+
+### `{$slug}_crypt_key_rotated`
+
+*Run tasks after the key has been replaced with rotate_key() or
+rollback_key_rotation().*
+
+The fingerprints are no secrets: they cannot be used to decrypt
+anything. Use this e.g. to start encrypting your values again with
+reencrypt().
+
+**Arguments**
+
+Argument | Type | Description
+-------- | ---- | -----------
+`$old_key_id` | `string` | The fingerprint of the former key.
+`$new_key_id` | `string` | The fingerprint of the new key.
+`$method` | `string` | The name of the method.
+
+**Changelog**
+
+Version | Description
+------- | -----------
+`4.3.0` | Available since 4.3.0.
+
+Source: [src/Method_Base.php](../src/Method_Base.php), [line 2143](../src/Method_Base.php#L2143-L2157)
 
 ### `{$slug}_wp_config_written`
 
@@ -61,7 +86,7 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Method_Base.php](../src/Method_Base.php), [line 346](../src/Method_Base.php#L346-L352)
+Source: [src/Method_Base.php](../src/Method_Base.php), [line 394](../src/Method_Base.php#L394-L400)
 
 ### `{$slug}_crypt_constant`
 
@@ -79,7 +104,7 @@ Version | Description
 ------- | -----------
 `1.1.2` | Available since 1.1.2.
 
-Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 244](../src/Methods/Sodium.php#L244-L250)
+Source: [src/Methods/Sodium.php](../src/Methods/Sodium.php), [line 283](../src/Methods/Sodium.php#L283-L289)
 
 ### `{$slug}_crypt_database_option_name`
 
@@ -115,7 +140,7 @@ Version | Description
 ------- | -----------
 `1.0.0` | Available since 1.0.0.
 
-Source: [src/Crypt.php](../src/Crypt.php), [line 598](../src/Crypt.php#L598-L604)
+Source: [src/Crypt.php](../src/Crypt.php), [line 831](../src/Crypt.php#L831-L837)
 
 ### `{$slug}_crypt_places`
 
@@ -133,7 +158,7 @@ Version | Description
 ------- | -----------
 `1.0.0` | Available since 1.0.0.
 
-Source: [src/Crypt.php](../src/Crypt.php), [line 907](../src/Crypt.php#L907-L913)
+Source: [src/Crypt.php](../src/Crypt.php), [line 1140](../src/Crypt.php#L1140-L1146)
 
 ### `{$slug}_crypt_secrets_api_name`
 

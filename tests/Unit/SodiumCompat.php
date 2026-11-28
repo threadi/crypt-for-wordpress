@@ -245,4 +245,17 @@ class SodiumCompat extends CryptForWordPressTests {
 			$this->assertSame( array( 'insecure_place_database' ), $entry['codes'], $hash_type );
 		}
 	}
+
+	/**
+	 * Test that the key can be rotated with sodium_compat.
+	 *
+	 * @return void
+	 */
+	public function test_sodium_compat_rotates_the_key(): void {
+		$result = $this->get_result();
+
+		$this->assertTrue( $result['rotation']['rotated'], (string) wp_json_encode( $result['rotation'] ) );
+		$this->assertTrue( $result['rotation']['moved'], (string) wp_json_encode( $result['rotation'] ) );
+		$this->assertSame( array( 'insecure_place_database' ), $result['rotation']['codes'] );
+	}
 }

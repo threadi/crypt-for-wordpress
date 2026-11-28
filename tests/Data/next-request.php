@@ -6,6 +6,9 @@
  * Modes:
  * - "write":   generate and save the key, encrypt the value.
  * - "read":    load the key from its place, decrypt the value.
+ * - "rotate":    rotate the key, decrypt the value and encrypt it anew.
+ * - "reencrypt": encrypt the value again with the key in use.
+ * - "discard":   discard the previous key.
  * - "cleanup": remove everything the requests saved.
  *
  * The arguments are given as JSON in the first argument. The result is
@@ -107,6 +110,23 @@ if ( 'write' === $args['mode'] ) {
 
 if ( 'read' === $args['mode'] ) {
 	$result['plain'] = $crypt->decrypt( $args['value'], $args['context'] );
+}
+
+if ( 'rotate' === $args['mode'] ) {
+	$rotated           = $crypt->rotate_key();
+	$result['rotated'] = true === $rotated ? true : $rotated->get_error_codes();
+	$result['plain']   = $crypt->decrypt( $args['value'], $args['context'] );
+	$result['value']   = $crypt->encrypt( $args['plain'], $args['context'] );
+}
+
+if ( 'reencrypt' === $args['mode'] ) {
+	$value           = $crypt->reencrypt( $args['value'], $args['context'] );
+	$result['value'] = is_string( $value ) ? $value : $value->get_error_codes();
+}
+
+if ( 'discard' === $args['mode'] ) {
+	$crypt->discard_previous_keys();
+	$result['discarded'] = true;
 }
 
 $key_id           = get_option( $key_id_option, '' );

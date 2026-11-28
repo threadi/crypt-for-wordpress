@@ -129,6 +129,27 @@ if ( is_wp_error( $decrypted ) ) {
 
 `encrypt_or_error()` works the same way for encrypting.
 
+### Rotating the key
+
+To replace the key by a new one, while the values encrypted so far stay readable:
+
+```
+$result = $crypt->rotate_key(); // true or WP_Error.
+
+// encrypt every value of your plugin again with the new key.
+$moved = $crypt->reencrypt( $value, $context );
+if ( is_string( $moved ) && $moved !== $value ) {
+ // save $moved instead of $value.
+}
+
+// once every value has been moved.
+$crypt->discard_previous_keys();
+```
+
+Nothing of this happens by itself: your plugin starts the rotation and moves its values, as only your plugin knows where they are saved. Until the previous key is discarded, `decrypt()` reads the values of both keys. `rollback_key_rotation()` undoes a rotation.
+
+See: [Rotating the key](docs/KeyRotation.md)
+
 ### Errors
 
 Check and get errors:

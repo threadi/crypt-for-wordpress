@@ -48,4 +48,8 @@ On a multisite network the fingerprint is saved where the key lives: for the who
 
 The values encrypted with the former key are not deleted. If the former key is restored - the original `define( '...-HASH', '...' );` line in the wp-config.php, or the generated Must-Use plugin - they are readable again. `key_changed` is reported once more for this change, and the values encrypted in the meantime with the other key are the ones that cannot be read then.
 
-To find out which key a value needs, look at the data of `key_mismatch`: `key_id` is the fingerprint of its key. Your backups of the database hold the fingerprint of the key used at their time, in the option `{slug}_crypt_key_id_{method}`. The backup of the files from the time, in which it matches, holds the key. Keeping this key is the job of your backups: the package never keeps a copy of a former key itself.
+To find out which key a value needs, look at the data of `key_mismatch`: `key_id` is the fingerprint of its key. Your backups of the database hold the fingerprint of the key used at their time, in the option `{slug}_crypt_key_id_{method}`. The backup of the files from the time, in which it matches, holds the key. Keeping this key is the job of your backups: the package never keeps a copy of a former key itself - except the previous key of a rotation, until it is discarded.
+
+## Replacing the key on purpose
+
+A key, which is replaced on purpose, does not have to be lost: `rotate_key()` replaces it, keeps the former key as previous key, and the values encrypted with it stay readable until your plugin has moved them to the new key. Neither `key_changed` nor `key_missing` is reported for it. See [Rotating the key](KeyRotation.md).

@@ -25,6 +25,8 @@ if ( is_wp_error( $value ) ) {
 - Warnungen, die das Verschlüsseln nicht verhindern - etwa `insecure_place_database` oder `key_in_inactive_place` - machen aus dem Ergebnis keinen `WP_Error`. Sie werden wie bisher in `get_errors()` gesammelt.
 - Jeder Fehler wird auch in `get_errors()` gesammelt und an den Hook unten übergeben - einmal. Der zurückgegebene `WP_Error` wird nicht noch einmal an den Hook übergeben.
 
+`reencrypt()` und `rotate_key()` liefern auf dieselbe Weise einen `WP_Error`, siehe [Den Schlüssel rotieren](KeyRotation_de.md).
+
 `encrypt()` und `decrypt()` arbeiten wie bisher. Eine Methode, die du über den Filter `{slug}_crypt_methods` ergänzt hast und die keinen ihrer Fehler meldet, lässt sich nicht von einem Wert ohne Inhalt unterscheiden: `decrypt_or_error()` liefert für sie einen leeren String.
 
 ## Vom Object abfragen

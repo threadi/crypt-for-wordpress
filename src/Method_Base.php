@@ -61,6 +61,49 @@ class Method_Base {
 	private const PAYLOAD_HEADER_LENGTH = 13;
 
 	/**
+	 * The context the previous key is encrypted with, see
+	 * get_previous_key_option_name().
+	 */
+	private const PREVIOUS_KEY_CONTEXT = 'crypt-for-wordpress-previous-key';
+
+	/**
+	 * The keys, which have been changed with rotate_key() or
+	 * rollback_key_rotation() during this request - as they are stored, by
+	 * the name of their constant.
+	 *
+	 * A constant cannot be defined anew: it keeps the former key until the
+	 * end of the request. Every object of this package reads the new key
+	 * from here instead, see get_hash_value_from_constant().
+	 *
+	 * @var array<string,string>
+	 */
+	private static array $changed_keys = array();
+
+	/**
+	 * The previous key, as it is stored - an empty string if there is none,
+	 * or null if it has not been looked up yet.
+	 *
+	 * @var string|null
+	 */
+	private ?string $previous_key = null;
+
+	/**
+	 * Whether this object works with another key than its own right now,
+	 * see run_with_key().
+	 *
+	 * @var bool
+	 */
+	private bool $is_using_other_key = false;
+
+	/**
+	 * Whether the last value decrypted with decrypt_with_any_key() has been
+	 * decrypted with the previous key.
+	 *
+	 * @var bool
+	 */
+	private bool $used_previous_key = false;
+
+	/**
 	 * The hash for encryption.
 	 *
 	 * @var string
@@ -286,6 +329,11 @@ class Method_Base {
 	 * @return string
 	 */
 	protected function get_hash_value_from_constant(): string {
+		// use the key, which has replaced the one of the constant during this request.
+		if ( isset( self::$changed_keys[ $this->get_constant() ] ) ) {
+			return self::$changed_keys[ $this->get_constant() ];
+		}
+
 		$constants = get_defined_constants();
 		// bail if our constant is not set.
 		if ( ! isset( $constants[ $this->get_constant() ] ) ) {
@@ -583,6 +631,10 @@ class Method_Base {
 		if ( is_multisite() ) {
 			delete_site_option( $this->get_key_id_option_name() );
 		}
+
+		// the previous key is encrypted with the key, which is forgotten:
+		// nothing can read it anymore.
+		$this->discard_previous_key();
 	}
 
 	/**
@@ -617,6 +669,14 @@ class Method_Base {
 			return;
 		}
 
+		// this is the key of a rotation, which has ended before its
+		// fingerprint could be remembered: the expected key is its previous
+		// key. Nothing has been lost, so nothing is reported.
+		if ( $this->is_key_of_unfinished_rotation() ) {
+			$this->remember_changed_key_id();
+			return;
+		}
+
 		// log this error.
 		$this->get_crypt_obj()->add_error(
 			'key_changed',
@@ -626,8 +686,18 @@ class Method_Base {
 			)
 		);
 
-		// this is the key from now on. If it is a key of the network, a
-		// fingerprint of this site no longer stands against it.
+		// this is the key from now on.
+		$this->remember_changed_key_id();
+	}
+
+	/**
+	 * Remember the fingerprint of the current key as the one of this
+	 * installation, replacing the one of the former key.
+	 *
+	 * @return void
+	 */
+	private function remember_changed_key_id(): void {
+		// if it is a key of the network, a fingerprint of this site no longer stands against it.
 		if ( $this->is_key_id_network_wide() ) {
 			delete_option( $this->get_key_id_option_name() );
 		}
@@ -1361,6 +1431,752 @@ class Method_Base {
 	}
 
 	/**
+	 * Return the name of the option, which holds the previous key of this
+	 * method after a rotation.
+	 *
+	 * The previous key is not saved in a place: not every place can hold a
+	 * second key. It is encrypted with the current key instead - so it is
+	 * as safe as every other value in the database: nobody can read it
+	 * without the key in its place. Each entry names the key it holds
+	 * ("key_id") and the key it is encrypted with ("wrapped_by"), see
+	 * get_previous_key_entry().
+	 *
+	 * @return string
+	 */
+	public function get_previous_key_option_name(): string {
+		return $this->get_crypt_obj()->get_slug() . '_crypt_previous_key_' . $this->get_name();
+	}
+
+	/**
+	 * Return the entries of the option holding the previous key - where the
+	 * fingerprint of the key in use lives.
+	 *
+	 * @return array<int,array{key_id:string,wrapped_by:string,value:string}>
+	 */
+	private function get_previous_key_entries(): array {
+		$option_name = $this->get_previous_key_option_name();
+		$value       = $this->is_key_id_network_wide() ? get_site_option( $option_name, array() ) : get_option( $option_name, array() );
+
+		// bail if the option holds nothing usable.
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		// take over every entry, which has the expected form.
+		$entries = array();
+		foreach ( $value as $entry ) {
+			if ( ! is_array( $entry ) || ! isset( $entry['key_id'], $entry['wrapped_by'], $entry['value'] ) || ! is_string( $entry['key_id'] ) || ! is_string( $entry['wrapped_by'] ) || ! is_string( $entry['value'] ) ) {
+				continue;
+			}
+
+			$entries[] = array(
+				'key_id'     => $entry['key_id'],
+				'wrapped_by' => $entry['wrapped_by'],
+				'value'      => $entry['value'],
+			);
+		}
+
+		return $entries;
+	}
+
+	/**
+	 * Save the entries of the option holding the previous key, and check
+	 * that they really arrived there.
+	 *
+	 * The option is never loaded with every request.
+	 *
+	 * @param array<int,array{key_id:string,wrapped_by:string,value:string}> $entries The entries.
+	 *
+	 * @return bool True if the option holds the entries.
+	 */
+	private function save_previous_key_entries( array $entries ): bool {
+		$option_name = $this->get_previous_key_option_name();
+		$entries     = array_values( $entries );
+
+		// remove the option, if there is nothing to keep.
+		if ( empty( $entries ) ) {
+			if ( $this->is_key_id_network_wide() ) {
+				delete_site_option( $option_name );
+			} else {
+				delete_option( $option_name );
+			}
+
+			return empty( $this->get_previous_key_entries() );
+		}
+
+		// save the entries - not loaded with every request.
+		if ( $this->is_key_id_network_wide() ) {
+			update_site_option( $option_name, $entries );
+		} else {
+			update_option( $option_name, $entries, false );
+
+			// update_option() keeps the autoload, if the value has not changed.
+			Helper::disable_option_autoload( $option_name );
+		}
+
+		// do not trust the write.
+		return $this->get_previous_key_entries() === $entries;
+	}
+
+	/**
+	 * Return whether this object still works with a key, which has been
+	 * changed during this request by another object.
+	 *
+	 * @return bool
+	 */
+	private function is_outdated(): bool {
+		$constant = $this->get_constant();
+
+		return isset( self::$changed_keys[ $constant ] ) && self::$changed_keys[ $constant ] !== $this->get_hash_value();
+	}
+
+	/**
+	 * Return the entry of the previous key, which is encrypted with the key
+	 * in use - or null, if there is none.
+	 *
+	 * Entries, which hold the key in use, are removed on the way: they are
+	 * left by a key change, which has ended before the new key could be
+	 * saved in its place. Entries encrypted with another key are left alone.
+	 *
+	 * @return array{key_id:string,wrapped_by:string,value:string}|null
+	 */
+	private function get_previous_key_entry(): ?array {
+		// bail if this object does not work with the key in use: what it would remove is not stale.
+		if ( $this->is_outdated() ) {
+			return null;
+		}
+
+		$current_key_id = $this->get_key_id( $this->get_key_material() );
+		$entries        = $this->get_previous_key_entries();
+
+		// remove the entries of a key change, which has not been finished.
+		$remaining = array_values(
+			array_filter(
+				$entries,
+				static function ( array $entry ) use ( $current_key_id ): bool {
+					return ! hash_equals( $current_key_id, $entry['key_id'] );
+				}
+			)
+		);
+		if ( count( $remaining ) !== count( $entries ) ) {
+			$this->save_previous_key_entries( $remaining );
+		}
+
+		// return the entry, which is encrypted with the key in use.
+		foreach ( $remaining as $entry ) {
+			if ( hash_equals( $current_key_id, $entry['wrapped_by'] ) ) {
+				return $entry;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Return whether the key in use is the new key of a rotation, whose
+	 * fingerprint has not been remembered: the request has ended between
+	 * saving the key and remembering its fingerprint.
+	 *
+	 * It is, if the previous key is the key this installation is known to
+	 * use, and it is encrypted with the key in use.
+	 *
+	 * @return bool
+	 */
+	private function is_key_of_unfinished_rotation(): bool {
+		// bail if the key is derived by its place: it is never rotated.
+		if ( '' !== $this->derived_key ) {
+			return false;
+		}
+
+		$current_key_id  = $this->get_key_id( $this->get_key_material() );
+		$expected_key_id = $this->get_expected_key_id();
+
+		foreach ( $this->get_previous_key_entries() as $entry ) {
+			if ( hash_equals( $current_key_id, $entry['wrapped_by'] ) && hash_equals( $expected_key_id, $entry['key_id'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Return the previous key, as it is stored - or an empty string if
+	 * there is none.
+	 *
+	 * After a rotation the previous key decrypts every value, which has
+	 * been encrypted before, until it is discarded.
+	 *
+	 * @return string
+	 */
+	protected function get_previous_key(): string {
+		// bail if this object works with another key right now, or with the key of another site.
+		if ( $this->is_using_other_key || $this->is_key_of_another_site() ) {
+			return '';
+		}
+
+		// bail if it has been looked up already.
+		if ( null !== $this->previous_key ) {
+			return $this->previous_key;
+		}
+		$this->previous_key = '';
+
+		// bail if there is no key, or the place derives it: it has never been rotated.
+		if ( '' === $this->get_hash() || '' !== $this->derived_key ) {
+			return '';
+		}
+
+		// bail if there is no previous key.
+		$entry = $this->get_previous_key_entry();
+		if ( null === $entry ) {
+			return '';
+		}
+
+		// decrypt it with the key in use.
+		$previous_key = $this->decrypt_with_context( $entry['value'], self::PREVIOUS_KEY_CONTEXT );
+
+		// bail if it could not be decrypted, or is not the key the entry names.
+		if ( '' === $previous_key || ! hash_equals( $entry['key_id'], $this->get_key_id( $previous_key ) ) ) {
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'previous_key_unreadable',
+				'The previous key could not be decrypted. Values encrypted with it cannot be decrypted.',
+				array(
+					'method' => $this->get_name(),
+					'key_id' => $entry['key_id'],
+				)
+			);
+
+			// do nothing more.
+			return '';
+		}
+
+		$this->previous_key = $previous_key;
+
+		return $previous_key;
+	}
+
+	/**
+	 * Remove the previous key of this method - for the site and the network.
+	 *
+	 * Values, which are still encrypted with it, cannot be decrypted
+	 * anymore. See Crypt::discard_previous_keys().
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @return void
+	 */
+	public function discard_previous_key(): void {
+		delete_option( $this->get_previous_key_option_name() );
+
+		if ( is_multisite() ) {
+			delete_site_option( $this->get_previous_key_option_name() );
+		}
+
+		$this->previous_key = null;
+	}
+
+	/**
+	 * Run the given callback with another key than the one of this object.
+	 *
+	 * Everything, which uses the key - get_hash(), the fingerprint, the key
+	 * ID of new values - works with the other key during the callback. The
+	 * own key is restored afterward in any case.
+	 *
+	 * @template T
+	 *
+	 * @param string       $stored_key The other key, as it is stored.
+	 * @param callable():T $callback   The callback.
+	 *
+	 * @return T
+	 */
+	private function run_with_key( #[\SensitiveParameter] string $stored_key, callable $callback ): mixed {
+		$hash               = $this->hash;
+		$derived_key        = $this->derived_key;
+		$is_using_other_key = $this->is_using_other_key;
+
+		$this->set_hash( $this->get_hash_from_stored_key( $stored_key ) );
+		$this->derived_key        = '';
+		$this->is_using_other_key = true;
+
+		try {
+			return $callback();
+		} finally {
+			$this->hash               = $hash;
+			$this->derived_key        = $derived_key;
+			$this->is_using_other_key = $is_using_other_key;
+		}
+	}
+
+	/**
+	 * Return the hash this method works with for a key, as it is stored.
+	 *
+	 * A method, which decodes its key in init(), overrides this.
+	 *
+	 * @param string $stored_key The key as it is stored.
+	 *
+	 * @return string
+	 */
+	protected function get_hash_from_stored_key( #[\SensitiveParameter] string $stored_key ): string {
+		return $stored_key;
+	}
+
+	/**
+	 * Return whether this method writes new values in the versioned payload
+	 * format, see create_payload_header().
+	 *
+	 * Only for such a method, a value names its key - and only such a value
+	 * can be told to be encrypted in a format of an older version.
+	 *
+	 * @return bool
+	 */
+	protected function writes_payload_header(): bool {
+		return false;
+	}
+
+	/**
+	 * Return the header of the given value, if it is one in a versioned
+	 * payload format this version can read - or null.
+	 *
+	 * @param string $encrypted_text The encrypted value.
+	 *
+	 * @return array{version:int,flags:int,key_id:string,bytes:string}|null
+	 */
+	private function get_header_of_value( string $encrypted_text ): ?array {
+		// bail if this method writes no header.
+		if ( ! $this->writes_payload_header() ) {
+			return null;
+		}
+
+		// get the payload. Every method of this package encodes it with base64.
+		$payload = base64_decode( $encrypted_text, true );
+
+		// bail if it is not base64 encoded.
+		if ( ! is_string( $payload ) ) {
+			return null;
+		}
+
+		// get the header.
+		$header = $this->read_payload_header( $payload );
+
+		return null !== $header && $this->is_payload_header_supported( $header ) ? $header : null;
+	}
+
+	/**
+	 * Decrypt a given string with the key in use - or with the previous
+	 * key, if the value has been encrypted with it.
+	 *
+	 * A value in the versioned payload format names its key: it is
+	 * decrypted with the key it names. A value of an older format does not:
+	 * it is decrypted with the key in use first, and only if that fails,
+	 * with the previous key. The errors of the attempt, which failed, are
+	 * not reported, unless both fail.
+	 *
+	 * @internal Used for internal tasks, see Crypt::decrypt().
+	 *
+	 * @param string $encrypted_text The encrypted string.
+	 * @param string $context        The context the value has been encrypted with, or an empty string.
+	 *
+	 * @return string
+	 */
+	public function decrypt_with_any_key( string $encrypted_text, string $context ): string {
+		$this->used_previous_key = false;
+
+		// decrypt with the key of this object - or the one run_with_key() has set.
+		$decrypt = function () use ( $encrypted_text, $context ): string {
+			return '' === $context ? $this->decrypt( $encrypted_text ) : $this->decrypt_with_context( $encrypted_text, $context );
+		};
+
+		// bail if there is no previous key: decrypt as always.
+		$previous_key = '' === $encrypted_text ? '' : $this->get_previous_key();
+		if ( '' === $previous_key ) {
+			return $decrypt();
+		}
+
+		// decrypt a value, which names its key, with that key.
+		$header = $this->get_header_of_value( $encrypted_text );
+		if ( null !== $header ) {
+			// bail if it is not the previous key: the method reports, if it is another one.
+			if ( ! hash_equals( (string) hex2bin( $this->get_key_id( $previous_key ) ), $header['key_id'] ) ) {
+				return $decrypt();
+			}
+
+			$this->used_previous_key = true;
+
+			return $this->run_with_key( $previous_key, $decrypt );
+		}
+
+		// decrypt a value of an older format with the key in use.
+		$crypt_obj                   = $this->get_crypt_obj();
+		list( $plain_text, $errors ) = $crypt_obj->collect_errors( $decrypt );
+
+		// return it, if it has been decrypted - or if its content is empty.
+		if ( '' !== $plain_text || empty( $errors ) ) {
+			$crypt_obj->add_errors( $errors );
+			return $plain_text;
+		}
+
+		// decrypt it with the previous key.
+		list( $previous_plain_text, $previous_errors ) = $crypt_obj->collect_errors(
+			function () use ( $previous_key, $decrypt ): string {
+				return $this->run_with_key( $previous_key, $decrypt );
+			}
+		);
+
+		// return it, if this worked.
+		if ( '' !== $previous_plain_text ) {
+			$this->used_previous_key = true;
+			$crypt_obj->add_errors( $previous_errors );
+
+			return $previous_plain_text;
+		}
+
+		// report why the key in use failed: with it, the value should have been decrypted.
+		$crypt_obj->add_errors( $errors );
+
+		return '';
+	}
+
+	/**
+	 * Return whether the value, which decrypt_with_any_key() has decrypted
+	 * last, should be encrypted again: it has been encrypted with the
+	 * previous key, in the format of an older version, or with other
+	 * settings than the current ones (e.g. 'bind_site').
+	 *
+	 * @internal Used for internal tasks, see Crypt::reencrypt().
+	 *
+	 * @param string $encrypted_text The encrypted value.
+	 *
+	 * @return bool
+	 */
+	public function needs_new_encryption( string $encrypted_text ): bool {
+		// a value of the previous key needs the key in use.
+		if ( $this->used_previous_key ) {
+			return true;
+		}
+
+		// bail if the format of the value cannot be told, or the format of version 4.2.0 is requested.
+		if ( ! $this->writes_payload_header() || ! $this->uses_versioned_payload() ) {
+			return false;
+		}
+
+		// a value without a header has been written in the format of an older version.
+		$header = $this->get_header_of_value( $encrypted_text );
+		if ( null === $header ) {
+			return true;
+		}
+
+		// a value with other settings than the current ones.
+		return $this->create_payload_header()['flags'] !== $header['flags'];
+	}
+
+	/**
+	 * Return a new key for this method, as it is stored - or an empty
+	 * string, if this method cannot generate one.
+	 *
+	 * A method of your own has to override this to support rotate_key().
+	 *
+	 * @return string
+	 */
+	protected function generate_key(): string {
+		return '';
+	}
+
+	/**
+	 * Replace the key in use by a new one, and keep it as previous key.
+	 *
+	 * See Crypt::rotate_key().
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @return bool True if the key has been replaced.
+	 */
+	public function rotate_key(): bool {
+		// take over a key, which another object has changed during this request.
+		$this->refresh_key();
+
+		$reason = $this->get_reason_against_key_change();
+
+		// a rotation would make the previous key unreadable: it is only
+		// encrypted with the key, which is replaced.
+		if ( '' === $reason && null !== $this->get_previous_key_entry() ) {
+			$reason = 'previous_key_exists';
+		}
+
+		// get the new key.
+		$new_key = '';
+		if ( '' === $reason ) {
+			try {
+				$new_key = $this->generate_key();
+			} catch ( \Exception $e ) {
+				$new_key = '';
+			}
+
+			if ( '' === $new_key ) {
+				$reason = 'key_not_generated';
+			}
+		}
+
+		// bail if the key cannot be replaced.
+		if ( '' !== $reason ) {
+			$this->report_key_change_not_possible( $reason );
+			return false;
+		}
+
+		return $this->change_key( $new_key );
+	}
+
+	/**
+	 * Use the previous key again, and keep the key in use as previous key.
+	 *
+	 * See Crypt::rollback_key_rotation().
+	 *
+	 * @internal Used for internal tasks.
+	 *
+	 * @return bool True if the key has been replaced.
+	 */
+	public function rollback_key_rotation(): bool {
+		// take over a key, which another object has changed during this request.
+		$this->refresh_key();
+
+		$reason       = $this->get_reason_against_key_change();
+		$previous_key = '' === $reason ? $this->get_previous_key() : '';
+
+		// bail if there is no previous key to use.
+		if ( '' === $reason && '' === $previous_key ) {
+			$reason = 'no_previous_key';
+		}
+
+		// bail if the key cannot be replaced.
+		if ( '' !== $reason ) {
+			$this->report_key_change_not_possible( $reason );
+			return false;
+		}
+
+		return $this->change_key( $previous_key );
+	}
+
+	/**
+	 * Return why the key in use cannot be replaced - or an empty string, if
+	 * it can.
+	 *
+	 * It can only be replaced, where it is saved: in the active place. A key
+	 * of another place would keep being loaded instead of the new one, and a
+	 * place, which derives its key or cannot save one, cannot take a new one.
+	 *
+	 * @return string
+	 */
+	private function get_reason_against_key_change(): string {
+		// bail if there is no key.
+		if ( '' === $this->get_hash() ) {
+			return 'no_key';
+		}
+
+		// bail if the place derives the key itself.
+		if ( '' !== $this->derived_key ) {
+			return 'derived_key';
+		}
+
+		// bail if the key in use belongs to another site.
+		if ( $this->is_key_of_another_site() ) {
+			return 'key_of_another_site';
+		}
+
+		// bail if there is no place to save a new key in.
+		if ( ! $this->place_obj instanceof Place_Base ) {
+			return 'no_place';
+		}
+
+		// bail if the key in use is not saved in the active place.
+		$this->place_obj->set_constant( $this->get_constant() );
+		if ( ! $this->place_obj->is_saved( $this->get_hash_value() ) ) {
+			return 'key_not_in_active_place';
+		}
+
+		return '';
+	}
+
+	/**
+	 * Report that the key cannot be replaced.
+	 *
+	 * @param string $reason The reason, see get_reason_against_key_change().
+	 *
+	 * @return void
+	 */
+	private function report_key_change_not_possible( string $reason ): void {
+		$messages = array(
+			'no_key'                  => 'There is no key to replace.',
+			'derived_key'             => 'The key is derived by its place, e.g. from the WordPress salts. Such a key cannot be replaced by the package.',
+			'key_of_another_site'     => 'The key in use belongs to another site of the network. Rotate it during a request of that site.',
+			'no_place'                => 'There is no place to save a new key in.',
+			'key_not_in_active_place' => 'The key is not saved in the active place, e.g. because it is given by a variable of the environment or the server. Only a key saved in the active place can be replaced.',
+			'previous_key_exists'     => 'The previous key of the last rotation still exists. Encrypt every value again with reencrypt() and discard it with discard_previous_keys() first.',
+			'no_previous_key'         => 'There is no previous key to use again.',
+			'key_not_generated'       => 'No new key could be generated.',
+		);
+
+		// log this error.
+		$this->get_crypt_obj()->add_error(
+			'key_rotation_not_possible',
+			'The key cannot be replaced. ' . ( $messages[ $reason ] ?? '' ),
+			array(
+				'method' => $this->get_name(),
+				'reason' => $reason,
+			)
+		);
+	}
+
+	/**
+	 * Replace the key in use by the given one, and keep the key in use as
+	 * previous key.
+	 *
+	 * The order makes every step safe, if the request ends in between:
+	 *
+	 * 1. The key in use is kept as previous key, encrypted with the new one.
+	 *    If the request ends here, the entry holds the key in use, and it is
+	 *    removed with the next request, see get_previous_key_entry().
+	 * 2. The new key is saved in the active place - nowhere else: a key in
+	 *    another place would not be loaded first. If this fails, the key in
+	 *    use stays, and the entry is removed again.
+	 * 3. Its fingerprint is remembered. If the request ends before, the next
+	 *    request recognizes the rotation, see is_key_of_unfinished_rotation().
+	 *
+	 * @param string $new_stored_key The new key, as it is stored.
+	 *
+	 * @return bool True if the key has been replaced.
+	 */
+	private function change_key( #[\SensitiveParameter] string $new_stored_key ): bool {
+		$constant       = $this->get_constant();
+		$old_stored_key = $this->get_hash_value();
+		$old_key_id     = $this->get_key_id( $old_stored_key );
+		$new_key_id     = $this->get_key_id( $new_stored_key );
+
+		// encrypt the key in use with the new key.
+		$wrapped = $this->run_with_key(
+			$new_stored_key,
+			function () use ( $old_stored_key ): string {
+				return $this->encrypt_with_context( $old_stored_key, self::PREVIOUS_KEY_CONTEXT );
+			}
+		);
+
+		// keep it as previous key.
+		$entries   = $this->get_previous_key_entries();
+		$entries[] = array(
+			'key_id'     => $old_key_id,
+			'wrapped_by' => $new_key_id,
+			'value'      => $wrapped,
+		);
+
+		// bail if it could not be kept: the key in use stays.
+		if ( '' === $wrapped || ! $this->save_previous_key_entries( $entries ) ) {
+			// remove what may have arrived.
+			$this->save_previous_key_entries( array_slice( $entries, 0, -1 ) );
+
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'previous_key_not_saved',
+				'The key in use could not be kept as previous key. It has not been replaced.',
+				array(
+					'method' => $this->get_name(),
+				)
+			);
+
+			// do nothing more.
+			return false;
+		}
+
+		// save the new key in the active place.
+		$place_obj = $this->place_obj;
+		if ( $place_obj instanceof Place_Base ) {
+			$place_obj->set_constant( $constant );
+			$place_obj->save( $new_stored_key );
+		}
+
+		// bail if the place does not hold it: the key in use stays.
+		if ( ! $place_obj instanceof Place_Base || ! $place_obj->is_saved( $new_stored_key ) ) {
+			// make sure the key in use is saved somewhere.
+			if ( $place_obj instanceof Place_Base && ! $place_obj->is_saved( $old_stored_key ) ) {
+				$place_obj->save( $old_stored_key );
+				if ( ! $place_obj->is_saved( $old_stored_key ) ) {
+					$this->get_crypt_obj()->save_in_place( $constant, $old_stored_key );
+				}
+			}
+
+			// the entry is not needed: the key in use has no previous key now.
+			$this->save_previous_key_entries( array_slice( $entries, 0, -1 ) );
+
+			// log this error.
+			$this->get_crypt_obj()->add_error(
+				'key_not_saved',
+				'The new key could not be saved in the active place. The key in use has not been replaced.',
+				array(
+					'method'   => $this->get_name(),
+					'constant' => $constant,
+				)
+			);
+
+			// do nothing more.
+			return false;
+		}
+
+		// use the new key from now on - also every other object of this request.
+		$this->set_hash( $this->get_hash_from_stored_key( $new_stored_key ) );
+		self::$changed_keys[ $constant ] = $new_stored_key;
+
+		// remember it as the key of this installation.
+		$this->remember_changed_key_id();
+
+		// remove the entries, which hold the new key: after a rollback this
+		// is the entry it has been kept in so far.
+		$this->save_previous_key_entries(
+			array_filter(
+				$entries,
+				static function ( array $entry ) use ( $new_key_id ): bool {
+					return ! hash_equals( $new_key_id, $entry['key_id'] );
+				}
+			)
+		);
+		$this->previous_key = $old_stored_key;
+
+		$slug   = $this->get_crypt_obj()->get_slug();
+		$method = $this->get_name();
+		/**
+		 * Run tasks after the key has been replaced with rotate_key() or
+		 * rollback_key_rotation().
+		 *
+		 * The fingerprints are no secrets: they cannot be used to decrypt
+		 * anything. Use this e.g. to start encrypting your values again with
+		 * reencrypt().
+		 *
+		 * @since 4.3.0 Available since 4.3.0.
+		 *
+		 * @param string $old_key_id The fingerprint of the former key.
+		 * @param string $new_key_id The fingerprint of the new key.
+		 * @param string $method     The name of the method.
+		 */
+		do_action( $slug . '_crypt_key_rotated', $old_key_id, $new_key_id, $method );
+
+		return true;
+	}
+
+	/**
+	 * Take over a key, which another object has changed during this request.
+	 *
+	 * @internal Used for internal tasks, see Crypt::get_method().
+	 *
+	 * @return void
+	 */
+	public function refresh_key(): void {
+		// bail if this object works with another key right now, its place derives the key, or it is up to date.
+		if ( $this->is_using_other_key || '' !== $this->derived_key || ! $this->is_outdated() ) {
+			return;
+		}
+
+		$this->set_hash( $this->get_hash_from_stored_key( self::$changed_keys[ $this->get_constant() ] ) );
+		$this->previous_key = null;
+	}
+
+	/**
 	 * Put the key of this method aside, before the places are cleaned up
 	 * during an uninstallation. Does nothing if it has been done already.
 	 *
@@ -1526,6 +2342,9 @@ class Method_Base {
 
 		// remove the option.
 		delete_option( $option_name );
+
+		// the previous key is encrypted with the kept key: nothing can read it without it.
+		$this->discard_previous_key();
 
 		$this->kept_key_source = '';
 	}

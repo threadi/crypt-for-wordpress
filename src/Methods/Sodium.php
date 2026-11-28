@@ -188,29 +188,7 @@ class Sodium extends Method_Base {
 			$this->report_missing_key();
 
 			// no key has ever been used, create one depending on the setting.
-			switch ( $this->configuration['hash_type'] ) {
-				case 'sodium_crypto_secretbox_keygen':
-					$hash = sodium_crypto_secretbox_keygen();
-					break;
-				case 'sodium_crypto_auth_keygen':
-					$hash = sodium_crypto_auth_keygen();
-					break;
-				case 'sodium_crypto_generichash_keygen':
-					$hash = sodium_crypto_generichash_keygen();
-					break;
-				case 'sodium_crypto_kdf_keygen':
-					$hash = sodium_crypto_kdf_keygen();
-					break;
-				case 'random_bytes':
-					$hash = random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
-					break;
-				default:
-					$hash = sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
-					break;
-			}
-
-			// set the hash.
-			$this->set_hash( $hash );
+			$this->set_hash( $this->generate_raw_key() );
 
 			// bail if the new key could not be saved in its place.
 			if ( ! $this->store_new_key() ) {
@@ -230,6 +208,67 @@ class Sodium extends Method_Base {
 				'Error during decrypting via sodium: ' . wp_kses_post( $e->getMessage() )
 			);
 		}
+	}
+
+	/**
+	 * Return a new raw key, generated with the configured 'hash_type'.
+	 *
+	 * @return string
+	 * @throws SodiumException On Exception through Sodium.
+	 * @throws Exception Could throw exception.
+	 */
+	private function generate_raw_key(): string {
+		switch ( $this->configuration['hash_type'] ) {
+			case 'sodium_crypto_secretbox_keygen':
+				return sodium_crypto_secretbox_keygen();
+			case 'sodium_crypto_auth_keygen':
+				return sodium_crypto_auth_keygen();
+			case 'sodium_crypto_generichash_keygen':
+				return sodium_crypto_generichash_keygen();
+			case 'sodium_crypto_kdf_keygen':
+				return sodium_crypto_kdf_keygen();
+			case 'random_bytes':
+				return random_bytes( SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES );
+			default:
+				return sodium_crypto_aead_xchacha20poly1305_ietf_keygen();
+		}
+	}
+
+	/**
+	 * Return a new key for this method, as it is stored. See rotate_key().
+	 *
+	 * @return string
+	 * @throws SodiumException On Exception through Sodium.
+	 * @throws Exception Could throw exception.
+	 */
+	protected function generate_key(): string {
+		return sodium_bin2base64( $this->generate_raw_key(), $this->get_coding_id() );
+	}
+
+	/**
+	 * Return the raw key this method works with for a key, as it is stored
+	 * - or an empty string, if it cannot be decoded.
+	 *
+	 * @param string $stored_key The key as it is stored.
+	 *
+	 * @return string
+	 */
+	protected function get_hash_from_stored_key( #[\SensitiveParameter] string $stored_key ): string {
+		try {
+			return sodium_base642bin( $stored_key, $this->get_coding_id() );
+		} catch ( Exception $e ) {
+			return '';
+		}
+	}
+
+	/**
+	 * Return whether this method writes new values in the versioned payload
+	 * format: it does.
+	 *
+	 * @return bool
+	 */
+	protected function writes_payload_header(): bool {
+		return true;
 	}
 
 	/**
